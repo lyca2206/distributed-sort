@@ -1,0 +1,3 @@
+rootProject.name = 'distributed-sort'
+include 'client'
+include 'server'
