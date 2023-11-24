@@ -1,7 +1,22 @@
 module AppInterface
 {
-    interface DistributedSort
+    sequence<string> seqStr;
+
+    ["java:implements:java.lang.Runnable"]
+    class Task {
+        void run();
+    };
+
+    interface Worker
     {
-        void printString(string s);
-    }
-}
+        void launch();
+        void shutdown();
+    };
+
+    interface Master
+    {
+        void signUp(Worker* worker);
+        Task getTask();
+        void addPartialResults(seqStr array);
+    };
+};
