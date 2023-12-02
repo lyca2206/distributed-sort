@@ -15,8 +15,8 @@ module AppInterface
 
     interface Master
     {
-        void signUp(Worker* worker);
-        Object getTask();
+        void signUp(string id, Worker* worker);
+        Object getTask(string id);
         void addPartialResults(seqStr array);
     };
 };

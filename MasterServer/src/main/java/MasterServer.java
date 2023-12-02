@@ -3,8 +3,7 @@ import com.zeroc.Ice.ObjectAdapter;
 import com.zeroc.Ice.Util;
 
 import java.io.IOException;
-import java.util.Collections;
-import java.util.LinkedList;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class MasterServer {
@@ -30,8 +29,8 @@ public class MasterServer {
         ObjectAdapter adapter = communicator.createObjectAdapter("MasterServer");
 
         MasterI master = new MasterI(
-                new ConcurrentLinkedQueue<>(), Collections.synchronizedList(new LinkedList<>())
-        );
+                new ConcurrentLinkedQueue<>(), new ConcurrentHashMap<>(),
+                new ConcurrentHashMap<>());
         adapter.add(master, Util.stringToIdentity("Master"));
         adapter.activate();
         System.out.println("Master has been started.");

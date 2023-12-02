@@ -9,7 +9,8 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.util.List;
+import java.util.Arrays;
+import java.util.Map;
 import java.util.Queue;
 import java.util.stream.Stream;
 
@@ -17,16 +18,18 @@ public class MasterI implements AppInterface.Master {
     private static final long CACHE_SIZE = 16777216;
 
     private final Queue<Task> queue;
-    private final List<WorkerPrx> workers;
+    private final Map<String, WorkerPrx> workers;
+    private final Map<String, Task> currentTasks;
 
-    public MasterI(Queue<Task> queue, List<WorkerPrx> workers) {
+    public MasterI(Queue<Task> queue, Map<String, WorkerPrx> workers, Map<String, Task> currentTasks) {
         this.queue = queue;
         this.workers = workers;
+        this.currentTasks = currentTasks;
     }
 
     @Override
-    public void signUp(WorkerPrx worker, Current current) {
-        workers.add(worker);
+    public void signUp(String id, WorkerPrx worker, Current current) {
+        workers.put(id, worker);
     }
 
     public void initialize() throws IOException {
@@ -94,20 +97,20 @@ public class MasterI implements AppInterface.Master {
         return new Task(data) {
             @Override
             public void run() {
-                //TODO.
+                Arrays.parallelSort(data);
             }
         };
     }
 
     private void launchWorkers() {
-        synchronized (workers) {
-            workers.forEach(WorkerPrx::launch);
-        }
+        workers.values().forEach(WorkerPrx::launch);
     }
 
     @Override
-    public Value getTask(Current current) {
-        return queue.poll();
+    public Value getTask(String id, Current current) {
+        Task task = queue.poll();
+        currentTasks.put(id, task);
+        return task;
     }
 
     @Override
@@ -120,8 +123,6 @@ public class MasterI implements AppInterface.Master {
     }
 
     private void shutdownWorkers() {
-        synchronized (workers) {
-            workers.forEach(WorkerPrx::shutdown);
-        }
+        workers.values().forEach(WorkerPrx::shutdown);
     }
 }
