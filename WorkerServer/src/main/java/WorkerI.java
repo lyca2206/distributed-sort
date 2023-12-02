@@ -14,9 +14,15 @@ public class WorkerI implements AppInterface.Worker {
         // ...
     }
 
+    private void processSortTask(){
+
+    }
+
+
     @Override
     public void shutdown(Current current) {
         // Implement logic to gracefully shut down worker threads
         // ...
+        //Shutdown server (terminate server)
     }
 }

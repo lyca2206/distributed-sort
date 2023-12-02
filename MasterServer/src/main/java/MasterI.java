@@ -1,4 +1,5 @@
 import AppInterface.StringSortTask;
+import AppInterface.TaskType;
 import AppInterface.WorkerPrx;
 import com.zeroc.Ice.Current;
 
@@ -74,7 +75,7 @@ public class MasterI implements AppInterface.Master {
     private void distributeTasks(List<String[]> dataChunks) {
         int taskID = 1;
         for (String[] chunk : dataChunks) {
-            StringSortTask sortTask = new StringSortTask(chunk);
+            StringSortTask sortTask = new StringSortTask(TaskType.SORT, chunk);
             distributeTask(sortTask, taskID++);
         }
     }
@@ -126,7 +127,7 @@ public class MasterI implements AppInterface.Master {
     public StringSortTask getTask(Current current) {
         // Implementa la lógica para distribuir tareas a los workers
         String[] dataToSort = new String[0]; // Obtén los datos a ordenar, posiblemente desde el archivo
-        return new StringSortTask(dataToSort);
+        return new StringSortTask(TaskType.SORT,dataToSort);
     }
     @Override
     public void addPartialResults(String[] array, Current current) {

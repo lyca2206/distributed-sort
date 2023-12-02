@@ -2,9 +2,19 @@ module AppInterface
 {
     sequence<string> seqStr;
 
-    ["java:implements:java.lang.Runnable"]
+    enum TaskType {SORT, MERGE};
+
     class Task {
-        void run();
+        TaskType type;
+    };
+
+    class StringSortTask extends Task{
+        seqStr array;
+    };
+
+    class MergeTask extends Task{
+        seqStr array1;
+        seqStr array2;
     };
 
     interface Worker
