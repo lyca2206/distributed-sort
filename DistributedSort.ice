@@ -4,7 +4,7 @@ module AppInterface
 
     ["java:implements:java.lang.Runnable"]
     class Task {
-        void run();
+        seqStr data;
     };
 
     interface Worker
@@ -16,7 +16,7 @@ module AppInterface
     interface Master
     {
         void signUp(Worker* worker);
-        Task getTask();
+        Object getTask();
         void addPartialResults(seqStr array);
     };
 };

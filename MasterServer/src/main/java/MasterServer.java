@@ -5,6 +5,7 @@ import com.zeroc.Ice.Util;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.LinkedList;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class MasterServer {
     public static void main(String[] args) {
@@ -29,7 +30,7 @@ public class MasterServer {
         ObjectAdapter adapter = communicator.createObjectAdapter("MasterServer");
 
         MasterI master = new MasterI(
-                Collections.synchronizedList(new LinkedList<>())
+                new ConcurrentLinkedQueue<>(), Collections.synchronizedList(new LinkedList<>())
         );
         adapter.add(master, Util.stringToIdentity("Master"));
         adapter.activate();
