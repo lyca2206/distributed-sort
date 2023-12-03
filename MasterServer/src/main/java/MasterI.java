@@ -187,7 +187,7 @@ public class MasterI implements AppInterface.Master {
     public void addSortingResults(String workerId, String taskId, List<String> array, Current current) {
         currentTasks.get(workerId).remove(taskId);
         addingToResults++;
-        //TODO.
+        groups.put(taskId, array);
         addingToResults--;
     }
 
