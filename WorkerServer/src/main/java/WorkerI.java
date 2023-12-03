@@ -39,7 +39,8 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
     private void getThenExecuteTask() {
         task = masterPrx.getTask(id);
         if (task != null) {
-            if (task instanceof GroupingTask groupingTask) {
+            if (task instanceof GroupingTask) {
+                GroupingTask groupingTask = (GroupingTask) task;
                 execute(() -> {
                     for (String string : groupingTask.data) {
                         String key = string.substring(0, groupingTask.characters);
