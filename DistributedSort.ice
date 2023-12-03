@@ -6,6 +6,7 @@ module AppInterface
     dictionary<string, ArrayList> Map;
 
     class Task {
+        long id;
         ArrayList data;
     };
 
@@ -23,9 +24,9 @@ module AppInterface
 
     interface Master
     {
-        void signUp(string id, Worker* worker);
-        Task getTask(string id);
-        void addGroupingResults(Map groups);
-        void addSortingResults(ArrayList array);
+        void signUp(string workerId, Worker* worker);
+        Task getTask(string workerId);
+        void addGroupingResults(string workerId, string taskId, Map groups);
+        void addSortingResults(string workerId, string taskId, ArrayList array);
     };
 };

@@ -11,6 +11,8 @@ import java.io.InputStreamReader;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Stream;
 
 public class MasterI implements AppInterface.Master {
@@ -18,14 +20,14 @@ public class MasterI implements AppInterface.Master {
 
     private final Queue<Task> queue;
     private final Map<String, WorkerPrx> workers;
-    private final Map<String, Task> currentTasks;
+    private final Map<String, Map<String, Task>> currentTasks;
     private final Map<String, List<String>> groups;
 
     private boolean isProcessing;
     private long addingToResults;
 
-    public MasterI(Queue<Task> queue, Map<String, WorkerPrx> workers, Map<String,
-            Task> currentTasks, Map<String, List<String>> groups) {
+    public MasterI(Queue<Task> queue, Map<String, WorkerPrx> workers,
+                   Map<String, Map<String, Task>> currentTasks, Map<String, List<String>> groups) {
         this.queue = queue;
         this.workers = workers;
         this.currentTasks = currentTasks;
@@ -35,8 +37,9 @@ public class MasterI implements AppInterface.Master {
     }
 
     @Override
-    public void signUp(String id, WorkerPrx worker, Current current) {
-        workers.put(id, worker);
+    public void signUp(String workerId, WorkerPrx worker, Current current) {
+        workers.put(workerId, worker);
+        currentTasks.put(workerId, new ConcurrentHashMap<>());
     }
 
     public void initialize() throws IOException {
@@ -51,11 +54,9 @@ public class MasterI implements AppInterface.Master {
 
     private void startProcessing(String fileName) throws IOException {
         long startTime = System.nanoTime();
-
         isProcessing = true;
         launchWorkers();
-        Thread thread = new Thread(this::startPingingWorkers);
-        thread.start();
+        new Thread(this::startPingingWorkers).start();
 
         createGroupingTasks(fileName);
         doNextStepAfterFinalization();
@@ -66,9 +67,11 @@ public class MasterI implements AppInterface.Master {
 
         shutdownWorkers();
         processAndServeResult();
-
         long endTime = System.nanoTime();
+
         System.out.println("Time: " + (endTime - startTime) + " ns.");
+
+        System.out.println(groups.values().toString());
     }
 
     private void launchWorkers() {
@@ -81,29 +84,34 @@ public class MasterI implements AppInterface.Master {
             {
                 WorkerPrx worker = workers.get(key);
                 try { worker.ping(); }
-                catch (TimeoutException e) {resetTask(key);}
+                catch (TimeoutException e) {
+                    resetTasks(key);}
             });
             try { Thread.sleep(5000); }
             catch (InterruptedException e) { throw new RuntimeException(e); }
         }
     }
 
-    private void resetTask(String key) {
-        Task task = currentTasks.remove(key);
-        if (task != null) { queue.add(task); }
+    private void resetTasks(String key) {
+        Map<String, Task> map = currentTasks.remove(key);
+        queue.addAll(map.values());
+        workers.remove(key);
     }
 
     private void createGroupingTasks(String fileName) throws IOException {
         try (BufferedReader br = new BufferedReader(new FileReader(fileName))) {
             long fileSize = getFileSize(fileName);
             long listSize = getLineCount(fileName);
+
+            System.out.println(listSize);
+
             long taskAmount = fileSize * (4 * 2) / L2_CACHE + 1;
-            long taskSize = listSize / taskAmount;
+            long taskSize = listSize / taskAmount + 1;
             int characters = (int) (Math.log(taskAmount) / Math.log(26 * 2 + 10)) + 1;
 
             for (long i = 0; i < taskAmount; i++) {
                 ArrayList<String> data = readData(br, taskSize);
-                Task task = new GroupingTask(data, new HashMap<>(), characters);
+                Task task = new GroupingTask(i, data, new HashMap<>(), characters);
                 queue.add(task);
             }
         }
@@ -131,15 +139,16 @@ public class MasterI implements AppInterface.Master {
 
     private void doNextStepAfterFinalization() {
         while (true) {
-            if (queue.isEmpty() && currentTasks.isEmpty() && addingToResults == 0) {
+            AtomicLong totalSize = new AtomicLong();
+            currentTasks.forEach(((string, stringTaskMap) -> totalSize.addAndGet(stringTaskMap.size())));
+            if (queue.isEmpty() && totalSize.get() <= 0 && addingToResults <= 0) {
                 break;
             }
         }
     }
 
     private void createSortingTasks() {
-        groups.values().forEach((array) -> {
-        });
+        //TODO.
     }
 
     private void processAndServeResult() {
@@ -147,15 +156,15 @@ public class MasterI implements AppInterface.Master {
     }
 
     @Override
-    public Task getTask(String id, Current current) {
+    public Task getTask(String workerId, Current current) {
         Task task = queue.poll();
-        if (task != null) { currentTasks.put(id, task); }
-        else { currentTasks.remove(id); }
+        if (task != null) { currentTasks.get(workerId).put(String.valueOf(task.id), task); }
         return task;
     }
 
     @Override
-    public void addGroupingResults(Map<String, List<String>> groups, Current current) {
+    public void addGroupingResults(String workerId, String taskId, Map<String, List<String>> groups, Current current) {
+        currentTasks.get(workerId).remove(taskId);
         addingToResults++;
         Map<String, List<String>> localGroups = this.groups;
         groups.keySet().forEach((key) -> {
@@ -166,7 +175,8 @@ public class MasterI implements AppInterface.Master {
     }
 
     @Override
-    public void addSortingResults(List<String> array, Current current) {
+    public void addSortingResults(String workerId, String taskId, List<String> array, Current current) {
+        currentTasks.get(workerId).remove(taskId);
         addingToResults++;
         //TODO.
         addingToResults--;

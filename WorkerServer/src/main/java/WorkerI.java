@@ -4,7 +4,6 @@ import AppInterface.Task;
 import com.zeroc.Ice.Current;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Comparator;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -50,12 +49,12 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
                         if (!groupingTask.groups.containsKey(key)) { groupingTask.groups.put(key, new ArrayList<>()); }
                         groupingTask.groups.get(key).add(string);
                     }
-                    masterPrx.addGroupingResults(groupingTask.groups);
+                    masterPrx.addGroupingResults(id, String.valueOf(groupingTask.id), groupingTask.groups);
                 });
             } else {
                 execute(() -> {
                     task.data.sort(Comparator.naturalOrder());
-                    masterPrx.addSortingResults(task.data);
+                    masterPrx.addSortingResults(id, String.valueOf(task.id), task.data);
                 });
             }
         }
