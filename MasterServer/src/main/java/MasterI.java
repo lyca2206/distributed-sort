@@ -2,6 +2,7 @@ import AppInterface.GroupingTask;
 import AppInterface.Task;
 import AppInterface.WorkerPrx;
 import com.zeroc.Ice.Current;
+import com.zeroc.Ice.TimeoutException;
 
 import java.io.BufferedReader;
 import java.io.FileReader;
@@ -18,17 +19,19 @@ public class MasterI implements AppInterface.Master {
     private final Queue<Task> queue;
     private final Map<String, WorkerPrx> workers;
     private final Map<String, Task> currentTasks;
+    private final Map<String, List<String>> groups;
 
-    public Map<String, List<String>> groups;
+    private boolean isProcessing;
+    private long addingToResults;
 
-    long startTime;
-    long endTime;
-
-    public MasterI(Queue<Task> queue, Map<String, WorkerPrx> workers, Map<String, Task> currentTasks, Map<String, List<String>> groups) {
+    public MasterI(Queue<Task> queue, Map<String, WorkerPrx> workers, Map<String,
+            Task> currentTasks, Map<String, List<String>> groups) {
         this.queue = queue;
         this.workers = workers;
         this.currentTasks = currentTasks;
         this.groups = groups;
+        isProcessing = false;
+        addingToResults = 0;
     }
 
     @Override
@@ -42,26 +45,64 @@ public class MasterI implements AppInterface.Master {
             System.out.println("Enter the name of the file to be sorted. Be aware that you need to deploy the Workers first.");
             String fileName = "./" + br.readLine();
 
-            startTime = System.nanoTime();
-
-            createGroupingTasks(fileName);
-            System.out.println("Line 49: "+queue.toString());
-            launchWorkers();
+            startProcessing(fileName);
         }
+    }
+
+    private void startProcessing(String fileName) throws IOException {
+        long startTime = System.nanoTime();
+
+        isProcessing = true;
+        launchWorkers();
+        Thread thread = new Thread(this::startPingingWorkers);
+        thread.start();
+
+        createGroupingTasks(fileName);
+        doNextStepAfterFinalization();
+
+        createSortingTasks();
+        doNextStepAfterFinalization();
+        isProcessing = false;
+
+        shutdownWorkers();
+        processAndServeResult();
+
+        long endTime = System.nanoTime();
+        System.out.println("Time: " + (endTime - startTime) + " ns.");
+    }
+
+    private void launchWorkers() {
+        workers.values().forEach(WorkerPrx::launch);
+    }
+
+    private void startPingingWorkers() {
+        while (isProcessing) {
+            workers.keySet().forEach((key) ->
+            {
+                WorkerPrx worker = workers.get(key);
+                try { worker.ping(); }
+                catch (TimeoutException e) {resetTask(key);}
+            });
+            try { Thread.sleep(5000); }
+            catch (InterruptedException e) { throw new RuntimeException(e); }
+        }
+    }
+
+    private void resetTask(String key) {
+        Task task = currentTasks.remove(key);
+        if (task != null) { queue.add(task); }
     }
 
     private void createGroupingTasks(String fileName) throws IOException {
         try (BufferedReader br = new BufferedReader(new FileReader(fileName))) {
             long fileSize = getFileSize(fileName);
             long listSize = getLineCount(fileName);
-            long taskAmount = fileSize * (4 * 2) / L2_CACHE + 2;
+            long taskAmount = fileSize * (4 * 2) / L2_CACHE + 1;
             long taskSize = listSize / taskAmount;
-            int characters = (int) (Math.log(taskAmount) / Math.log(26 * 2 + 10)) + 2;
-
-            System.out.println("Line 62: "+characters);
+            int characters = (int) (Math.log(taskAmount) / Math.log(26 * 2 + 10)) + 1;
 
             for (long i = 0; i < taskAmount; i++) {
-                String[] data = readData(br, taskSize);
+                ArrayList<String> data = readData(br, taskSize);
                 Task task = new GroupingTask(data, new HashMap<>(), characters);
                 queue.add(task);
             }
@@ -78,54 +119,57 @@ public class MasterI implements AppInterface.Master {
         }
     }
 
-    private String[] readData(BufferedReader br, long taskSize) throws IOException {
-        String[] data = new String[(int) taskSize];
-
+    private ArrayList<String> readData(BufferedReader br, long taskSize) throws IOException {
+        ArrayList<String> data = new ArrayList<>((int) taskSize);
         for (long i = 0; i < taskSize; i++) {
             String line = br.readLine();
-
-            if (line == null) {
-                return data;
-            }
-
-            data[(int) i] = line;
+            if (line == null) { return data; }
+            data.add(line);
         }
-
         return data;
     }
 
-    private void launchWorkers() {
-        workers.values().forEach(WorkerPrx::launch);
+    private void doNextStepAfterFinalization() {
+        while (true) {
+            if (queue.isEmpty() && currentTasks.isEmpty() && addingToResults == 0) {
+                break;
+            }
+        }
+    }
+
+    private void createSortingTasks() {
+        groups.values().forEach((array) -> {
+        });
+    }
+
+    private void processAndServeResult() {
+        //TODO.
     }
 
     @Override
     public Task getTask(String id, Current current) {
         Task task = queue.poll();
-        if (task != null) {
-            currentTasks.put(id, task);
-        }
+        if (task != null) { currentTasks.put(id, task); }
+        else { currentTasks.remove(id); }
         return task;
     }
 
     @Override
-    public void addPartialResults(String[] array, Current current) {
-        //TODO.
-    }
-
-    @Override
     public void addGroupingResults(Map<String, List<String>> groups, Current current) {
+        addingToResults++;
         Map<String, List<String>> localGroups = this.groups;
-
         groups.keySet().forEach((key) -> {
             if (!localGroups.containsKey(key)) { localGroups.put(key, groups.get(key)); }
             else { localGroups.get(key).addAll(groups.get(key)); }
         });
+        addingToResults--;
+    }
 
-        if (queue.isEmpty()) {
-            endTime = System.nanoTime();
-            System.out.println("Line 132: "+(endTime - startTime) / 1000000);
-            localGroups.keySet().forEach((key) -> {System.out.println(key+": "+localGroups.get(key).size());});
-        }
+    @Override
+    public void addSortingResults(List<String> array, Current current) {
+        addingToResults++;
+        //TODO.
+        addingToResults--;
     }
 
     private void shutdownWorkers() {

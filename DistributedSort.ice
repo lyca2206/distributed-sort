@@ -1,24 +1,23 @@
 module AppInterface
 {
-    sequence<string> seqStr;
-
     ["java:type:java.util.ArrayList<String>"]
     sequence<string> ArrayList;
 
-    dictionary<string, ArrayList> dictStrSeq;
+    dictionary<string, ArrayList> Map;
 
     class Task {
-        seqStr data;
+        ArrayList data;
     };
 
     class GroupingTask extends Task {
-        dictStrSeq groups;
+        Map groups;
         int characters;
     };
 
     interface Worker
     {
         void launch();
+        void ping();
         void shutdown();
     };
 
@@ -26,7 +25,7 @@ module AppInterface
     {
         void signUp(string id, Worker* worker);
         Task getTask(string id);
-        void addPartialResults(seqStr array);
-        void addGroupingResults(dictStrSeq groups);
+        void addGroupingResults(Map groups);
+        void addSortingResults(ArrayList array);
     };
 };

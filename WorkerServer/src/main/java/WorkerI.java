@@ -5,6 +5,7 @@ import com.zeroc.Ice.Current;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -13,7 +14,6 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
     private final MasterPrx masterPrx;
     private final String id;
     private boolean isRunning;
-    private Task task;
 
     public WorkerI(int corePoolSize, int maximumPoolSize, long keepAliveTime,
                    TimeUnit unit, BlockingQueue<Runnable> workQueue, MasterPrx masterPrx, String id) {
@@ -30,14 +30,17 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
         thread.start();
     }
 
+    @Override
+    public void ping(Current current) {}
+
     private void startTaskPolling() {
         while (isRunning) {
-            if (getPoolSize() < getMaximumPoolSize()) { getThenExecuteTask(); }
+            if (getActiveCount() < getMaximumPoolSize()) { getThenExecuteTask(); }
         }
     }
 
     private void getThenExecuteTask() {
-        task = masterPrx.getTask(id);
+        Task task = masterPrx.getTask(id);
         if (task != null) {
             if (task instanceof GroupingTask) {
                 GroupingTask groupingTask = (GroupingTask) task;
@@ -47,22 +50,13 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
                         if (!groupingTask.groups.containsKey(key)) { groupingTask.groups.put(key, new ArrayList<>()); }
                         groupingTask.groups.get(key).add(string);
                     }
+                    masterPrx.addGroupingResults(groupingTask.groups);
                 });
             } else {
                 execute(() -> {
-                    Arrays.sort(task.data);
+                    task.data.sort(Comparator.naturalOrder());
+                    masterPrx.addSortingResults(task.data);
                 });
-            }
-        }
-    }
-
-    @Override
-    protected void afterExecute(Runnable r, Throwable t) {
-        if (task != null) {
-            if (task instanceof GroupingTask) {
-                masterPrx.addGroupingResults(((GroupingTask) task).groups);
-            } else {
-                masterPrx.addPartialResults(task.data);
             }
         }
     }
