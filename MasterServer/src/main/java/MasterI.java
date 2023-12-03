@@ -154,7 +154,10 @@ public class MasterI implements AppInterface.Master {
     }
 
     private void createSortingTasks() {
-        //TODO.
+        groups.forEach((key, list) -> {
+            Task task = new Task(key, list);
+            queue.add(task);
+        });
     }
 
     private void processAndServeResult() {
