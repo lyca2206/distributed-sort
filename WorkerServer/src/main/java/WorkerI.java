@@ -43,8 +43,8 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
                 execute(() -> {
                     for (String string : groupingTask.data) {
                         String key = string.substring(0, groupingTask.characters);
-                        if (groupingTask.groups.containsKey(key)) { groupingTask.groups.get(key).add(string); }
-                        else { groupingTask.groups.put(key, new ArrayList<>()); }
+                        if (!groupingTask.groups.containsKey(key)) { groupingTask.groups.put(key, new ArrayList<>()); }
+                        groupingTask.groups.get(key).add(string);
                     }
                 });
             } else {

@@ -5,6 +5,7 @@ import com.zeroc.Ice.Util;
 import java.io.IOException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ConcurrentSkipListMap;
 
 public class MasterServer {
     public static void main(String[] args) {
@@ -30,7 +31,7 @@ public class MasterServer {
 
         MasterI master = new MasterI(
                 new ConcurrentLinkedQueue<>(), new ConcurrentHashMap<>(),
-                new ConcurrentHashMap<>(), new ConcurrentHashMap<>());
+                new ConcurrentHashMap<>(), new ConcurrentSkipListMap<>());
         adapter.add(master, Util.stringToIdentity("Master"));
         adapter.activate();
         System.out.println("Master has been started.");

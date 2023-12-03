@@ -14,7 +14,6 @@ import java.util.stream.Stream;
 
 public class MasterI implements AppInterface.Master {
     private static final long L2_CACHE = 4194304;
-    private static final long L3_CACHE = 16777216;
 
     private final Queue<Task> queue;
     private final Map<String, WorkerPrx> workers;
@@ -55,14 +54,9 @@ public class MasterI implements AppInterface.Master {
         try (BufferedReader br = new BufferedReader(new FileReader(fileName))) {
             long fileSize = getFileSize(fileName);
             long listSize = getLineCount(fileName);
-
-            long taskAmount = fileSize * 8 / L2_CACHE;
-            taskAmount = Math.max(1, taskAmount);
-
+            long taskAmount = fileSize * (4 * 2) / L2_CACHE + 2;
             long taskSize = listSize / taskAmount;
-
-            int characters = (int) (Math.log(taskAmount) / Math.log(26 * 2 + 10));
-            characters = Math.max(1, characters);
+            int characters = (int) (Math.log(taskAmount) / Math.log(26 * 2 + 10)) + 2;
 
             System.out.println("Line 62: "+characters);
 
@@ -130,7 +124,7 @@ public class MasterI implements AppInterface.Master {
         if (queue.isEmpty()) {
             endTime = System.nanoTime();
             System.out.println("Line 132: "+(endTime - startTime) / 1000000);
-            localGroups.keySet().forEach((key) -> {System.out.println("Line 133: " + key + ": " + localGroups.get(key).size());});
+            localGroups.keySet().forEach((key) -> {System.out.println(key+": "+localGroups.get(key).size());});
         }
     }
 
