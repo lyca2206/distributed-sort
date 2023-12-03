@@ -1,6 +1,4 @@
-import AppInterface.StringSortTask;
-import AppInterface.TaskType;
-import AppInterface.WorkerPrx;
+import AppInterface.*;
 import com.zeroc.Ice.Current;
 
 import java.io.BufferedReader;
@@ -8,19 +6,19 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
+import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class MasterI implements AppInterface.Master {
     private final List<WorkerPrx> prxList;
 
+    private final ArrayDeque<Task> tasks = new ArrayDeque<>();
+
     private static final int MAX_THREADS = 4;
 
     // Ajusta según necesidad, este valor indica cuántas líneas por tarea se asignarán a cada worker
-    private static final int LINES_PER_TASK = 100;
+    private static final int LINES_PER_TASK = 250;
 
 
     public MasterI(List<WorkerPrx> prxList) {
@@ -37,39 +35,45 @@ public class MasterI implements AppInterface.Master {
             System.out.println("Enter the name of the file to be sorted. Be aware that you need to deploy the Workers first.");
             String fileName = "./" + br.readLine();
 
-            int numWorkers = calculateNumWorkers(getFileSize(fileName), getLineCount(fileName));
+            //Create tasks
+            createTasks(fileName);
 
+
+            int numWorkers = calculateNumWorkers(getFileSize(fileName), getLineCount(fileName));
             System.out.println("Launching " + numWorkers + " workers...");
             launchWorkers(numWorkers);
 
             // Divide el archivo en tareas y envía a los workers
-            createAndDistributeTasks(fileName);
+
 
             // Continuar con la lógica de procesamiento de resultados...
         }
     }
 
-    private void createAndDistributeTasks(String fileName) throws IOException {
+    private void createTasks(String fileName) throws IOException {
         // Lee el archivo y divide en partes pequeñas
-        List<String[]> dataChunks = readAndSplitFile(fileName, LINES_PER_TASK);
+        //List<String[]> dataChunks = readAndFileAndCreateTasks(fileName, LINES_PER_TASK);
+
+        readFileAndCreateTasks(fileName);
 
         // Genera tareas y las distribuye a los workers
-        distributeTasks(dataChunks);
+        //distributeTasks(dataChunks);
     }
 
-    private List<String[]> readAndSplitFile(String fileName, int linesPerTask) throws IOException {
-        List<String[]> dataChunks = new ArrayList<>();
+    private void readFileAndCreateTasks(String fileName) throws IOException {
+        //List<String[]> dataChunks = new ArrayList<>();
         try (Stream<String> fileStream = Files.lines(Paths.get(fileName))) {
             List<String> lines = fileStream.collect(Collectors.toList());
 
             // Divide las líneas en partes pequeñas
-            for (int i = 0; i < lines.size(); i += linesPerTask) {
-                int end = Math.min(i + linesPerTask, lines.size());
+            for (int i = 0; i < lines.size(); i += MasterI.LINES_PER_TASK) {
+                int end = Math.min(i + MasterI.LINES_PER_TASK, lines.size());
                 String[] chunk = lines.subList(i, end).toArray(new String[0]);
-                dataChunks.add(chunk);
+                //dataChunks.add(chunk);
+                tasks.offer(new StringSortTask(TaskType.SORT,chunk));
             }
         }
-        return dataChunks;
+        //return dataChunks;
     }
 
     private void distributeTasks(List<String[]> dataChunks) {
@@ -124,18 +128,28 @@ public class MasterI implements AppInterface.Master {
     }
 
     @Override
-    public StringSortTask getTask(Current current) {
-        // Implementa la lógica para distribuir tareas a los workers
-        String[] dataToSort = new String[0]; // Obtén los datos a ordenar, posiblemente desde el archivo
-        return new StringSortTask(TaskType.SORT,dataToSort);
+    public Task getTask(Current current) {
+        return tasks.poll();
     }
+
+    private final Queue<String []> partialResults = new ArrayDeque<>();
+
     @Override
     public void addPartialResults(String[] array, Current current) {
-        mergeResults(array); // Implement logic to process and merge partial results from workers
+
+        String [] toMerge = partialResults.poll(); //check here for ending
+
+        if(toMerge != null){
+            tasks.push(new MergeTask(TaskType.MERGE,array, toMerge));
+        }
+        else{
+            partialResults.offer(array);
+        }
+        //mergeResults(array); // Implement logic to process and merge partial results from workers
     }
 
     // Nueva función para implementar el algoritmo de ordenamiento MSD String Sort (Radix Sort)
-    private void mergeResults(String[] array) {
+    /*private void mergeResults(String[] array) {
         // Concatenar los resultados parciales
         String[] mergedArray = concatenateArrays(array);
 
@@ -157,44 +171,7 @@ public class MasterI implements AppInterface.Master {
         }
         return resultList.toArray(new String[0]);
     }
-
-    private void msdStringSort(String[] array, int low, int high, int digit) {
-        final int R = 256; // Número de caracteres ASCII extendido
-
-        if (high <= low || digit >= array[0].length()) {
-            return;
-        }
-
-        // Utiliza un arreglo de contadores para contar la frecuencia de cada caracter
-        int[] count = new int[R + 2];
-
-        // Contar la frecuencia de cada caracter en la posición "digit"
-        for (int i = low; i <= high; i++) {
-            int charIndex = (array[i].length() > digit) ? array[i].charAt(digit) + 2 : 1;
-            count[charIndex]++;
-        }
-
-        // Calcula las posiciones iniciales para cada caracter
-        for (int r = 0; r < R + 1; r++) {
-            count[r + 1] += count[r];
-        }
-
-        // Realiza la clasificación según el caracter en la posición "digit"
-        String[] aux = new String[high - low + 1];
-        for (int i = low; i <= high; i++) {
-            int charIndex = (array[i].length() > digit) ? array[i].charAt(digit) + 1 : 0;
-            aux[count[charIndex]++] = array[i];
-        }
-
-        // Copia los elementos ordenados de vuelta al array original
-        System.arraycopy(aux, 0, array, low, aux.length);
-
-        // Recursivamente ordena los subarrays para cada caracter
-        for (int r = 0; r < R; r++) {
-            msdStringSort(array, low + count[r], low + count[r + 1] - 1, digit + 1);
-        }
-    }
-
+    */
     private void processResults(String[] array) {
         // Implementa la lógica para finalizar y presentar los resultados
         // Puedes imprimir el array ordenado o realizar otras acciones según tus necesidades
