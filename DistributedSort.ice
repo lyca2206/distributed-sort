@@ -2,25 +2,33 @@ module AppInterface
 {
     sequence<string> seqStr;
 
-    interface Worker
-    {
-        void launch();
-        void addGroupResults(seqStr array);
-        void addSortResults(seqStr array);
-        void shutdown();
-    };
+    ["java:type:java.util.ArrayList<String>"]
+    sequence<string> ArrayList;
+
+    dictionary<string, ArrayList> dictStrSeq;
 
     ["java:implements:java.lang.Runnable"]
     class Task {
-        Worker* worker;
         seqStr data;
+    };
+
+    ["java:implements:java.lang.Runnable"]
+    class GroupingTask extends Task {
+        dictStrSeq groups;
+        int characters;
+    };
+
+    interface Worker
+    {
+        void launch();
+        void shutdown();
     };
 
     interface Master
     {
         void signUp(string id, Worker* worker);
         Task getTask(string id);
-        void addGroupResults(seqStr array);
-        void addSortResults(seqStr array);
+        void addPartialResults(seqStr array);
+        void addGroupingResults(dictStrSeq groups);
     };
 };

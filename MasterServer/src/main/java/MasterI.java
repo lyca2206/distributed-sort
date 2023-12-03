@@ -1,7 +1,7 @@
+import AppInterface.GroupingTask;
 import AppInterface.Task;
 import AppInterface.WorkerPrx;
 import com.zeroc.Ice.Current;
-import com.zeroc.Ice.Value;
 
 import java.io.BufferedReader;
 import java.io.FileReader;
@@ -13,13 +13,17 @@ import java.util.*;
 import java.util.stream.Stream;
 
 public class MasterI implements AppInterface.Master {
-    private static final long CACHE_SIZE = 16777216;
+    private static final long L2_CACHE = 4194304;
+    private static final long L3_CACHE = 16777216;
 
     private final Queue<Task> queue;
     private final Map<String, WorkerPrx> workers;
     private final Map<String, Task> currentTasks;
 
-    private final Map<String, List<String>> groups;
+    public Map<String, List<String>> groups;
+
+    long startTime;
+    long endTime;
 
     public MasterI(Queue<Task> queue, Map<String, WorkerPrx> workers, Map<String, Task> currentTasks, Map<String, List<String>> groups) {
         this.queue = queue;
@@ -27,11 +31,6 @@ public class MasterI implements AppInterface.Master {
         this.currentTasks = currentTasks;
         this.groups = groups;
     }
-
-
-    long startTime;
-    long endTime;
-
 
     @Override
     public void signUp(String id, WorkerPrx worker, Current current) {
@@ -47,7 +46,6 @@ public class MasterI implements AppInterface.Master {
             startTime = System.currentTimeMillis();
 
             createTasks(fileName);
-            System.out.println(queue.toString());
             launchWorkers();
         }
     }
@@ -56,12 +54,13 @@ public class MasterI implements AppInterface.Master {
         try (BufferedReader br = new BufferedReader(new FileReader(fileName))) {
             long fileSize = getFileSize(fileName);
             long listSize = getLineCount(fileName);
-            long taskAmount = fileSize * 32 / CACHE_SIZE;
+            long taskAmount = fileSize * 8 / L2_CACHE;
             long taskSize = listSize / taskAmount;
+            int characters = (int) (Math.log(taskAmount) / Math.log(26 * 2 + 10));
 
             for (long i = 0; i < taskAmount; i++) {
                 String[] data = readData(br, taskSize);
-                Task task = createGroupingTask(data);
+                Task task = createGroupingTask(data, characters);
                 queue.add(task);
             }
         }
@@ -93,29 +92,24 @@ public class MasterI implements AppInterface.Master {
         return data;
     }
 
-    private Task createGroupingTask(String[] data) {
-        return new Task(null, data) {
+    private Task createGroupingTask(String[] data, int characters) {
+        return new GroupingTask(data, new HashMap<>(), characters) {
             @Override
             public void run() {
-                Map<String, ArrayList<String>> map = new HashMap<>();
-                for (String s : data) {
-                    String key = s.substring(0, 2);
-                    if (map.containsKey(key)) { map.get(key).add(s); }
-                    else { map.put(key, new ArrayList<>()); }
-                }
-                for (ArrayList<String> list : map.values()) {
-                    this.worker.addGroupResults(list.toArray(new String[0]));
+                for (String string : data) {
+                    String key = string.substring(0, characters);
+                    if (groups.containsKey(key)) { groups.get(key).add(string); }
+                    else { groups.put(key, new ArrayList<>()); }
                 }
             }
         };
     }
 
     private Task createSortingTask(String[] data) {
-        return new Task(null, data) {
+        return new Task(data) {
             @Override
             public void run() {
                 Arrays.sort(data);
-                worker.addSortResults(data);
             }
         };
     }
@@ -132,23 +126,23 @@ public class MasterI implements AppInterface.Master {
     }
 
     @Override
-    public void addGroupResults(String[] array, Current current) {
-        String key = array[0].substring(0, 2);
-        if (groups.containsKey(key)) {
-            List<String> list = groups.get(key);
-            list.addAll(Arrays.asList(array));
-        } else {
-            groups.put(key, Arrays.asList(array));
-        }
+    public void addPartialResults(String[] array, Current current) {
+        //TODO.
+    }
+
+    @Override
+    public void addGroupingResults(Map<String, List<String>> groups, Current current) {
+        Map<String, List<String>> localGroups = this.groups;
+
+        groups.keySet().forEach((key) -> {
+            if (!localGroups.containsKey(key)) { localGroups.put(key, groups.get(key)); }
+            else { localGroups.get(key).addAll(groups.get(key)); }
+        });
 
         if (queue.isEmpty()) {
             endTime = System.currentTimeMillis();
             System.out.println((endTime - startTime) / 1000);
         }
-    }
-
-    @Override
-    public void addSortResults(String[] array, Current current) {
     }
 
     private void shutdownWorkers() {

@@ -1,3 +1,4 @@
+import AppInterface.GroupingTask;
 import AppInterface.MasterPrx;
 import AppInterface.Task;
 import com.zeroc.Ice.Current;
@@ -11,8 +12,8 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
     private final String id;
     private boolean isRunning;
 
-    public WorkerI(int corePoolSize, int maximumPoolSize, long keepAliveTime, TimeUnit unit,
-                   BlockingQueue<Runnable> workQueue, MasterPrx masterPrx, String id) {
+    public WorkerI(int corePoolSize, int maximumPoolSize, long keepAliveTime,
+                   TimeUnit unit, BlockingQueue<Runnable> workQueue, MasterPrx masterPrx, String id) {
         super(corePoolSize, maximumPoolSize, keepAliveTime, unit, workQueue);
         this.masterPrx = masterPrx;
         this.id = id;
@@ -40,13 +41,13 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
     }
 
     @Override
-    public void addGroupResults(String[] array, Current current) {
-        masterPrx.addGroupResults(array);
-    }
-
-    @Override
-    public void addSortResults(String[] array, Current current) {
-        masterPrx.addSortResults(array);
+    protected void afterExecute(Runnable r, Throwable t) {
+        Task task = (Task) r;
+        if (task instanceof GroupingTask) {
+            masterPrx.addGroupingResults(((GroupingTask) task).groups);
+        } else {
+            masterPrx.addPartialResults(task.data);
+        }
     }
 
     @Override
