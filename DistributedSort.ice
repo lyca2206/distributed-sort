@@ -6,7 +6,7 @@ module AppInterface
     dictionary<string, ArrayList> Map;
 
     class Task {
-        long id;
+        string id;
         ArrayList data;
     };
 

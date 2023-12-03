@@ -48,6 +48,7 @@ public class MasterI implements AppInterface.Master {
             System.out.println("Enter the name of the file to be sorted. Be aware that you need to deploy the Workers first.");
             String fileName = "./" + br.readLine();
 
+            System.out.println("Sorting has started.");
             startProcessing(fileName);
         }
     }
@@ -69,9 +70,14 @@ public class MasterI implements AppInterface.Master {
         processAndServeResult();
         long endTime = System.nanoTime();
 
+        AtomicLong listSize = new AtomicLong();
+        groups.values().forEach((list) -> {
+            listSize.addAndGet(list.size());
+        });
+
+        System.out.println(listSize);
         System.out.println("Time: " + (endTime - startTime) + " ns.");
 
-        System.out.println(groups.values().toString());
     }
 
     private void launchWorkers() {
@@ -111,7 +117,7 @@ public class MasterI implements AppInterface.Master {
 
             for (long i = 0; i < taskAmount; i++) {
                 ArrayList<String> data = readData(br, taskSize);
-                Task task = new GroupingTask(i, data, new HashMap<>(), characters);
+                Task task = new GroupingTask(String.valueOf(i), data, new HashMap<>(), characters);
                 queue.add(task);
             }
         }
@@ -158,7 +164,7 @@ public class MasterI implements AppInterface.Master {
     @Override
     public Task getTask(String workerId, Current current) {
         Task task = queue.poll();
-        if (task != null) { currentTasks.get(workerId).put(String.valueOf(task.id), task); }
+        if (task != null) { currentTasks.get(workerId).put(task.id, task); }
         return task;
     }
 

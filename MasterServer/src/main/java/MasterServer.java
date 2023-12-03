@@ -20,8 +20,6 @@ public class MasterServer {
         try(Communicator communicator = Util.initialize(args, "master.cfg"))
         {
             serviceInit(communicator);
-            System.out.println("Sorting has started.");
-
             communicator.waitForShutdown();
         }
     }

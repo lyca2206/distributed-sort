@@ -49,12 +49,12 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
                         if (!groupingTask.groups.containsKey(key)) { groupingTask.groups.put(key, new ArrayList<>()); }
                         groupingTask.groups.get(key).add(string);
                     }
-                    masterPrx.addGroupingResults(id, String.valueOf(groupingTask.id), groupingTask.groups);
+                    masterPrx.addGroupingResults(id, groupingTask.id, groupingTask.groups);
                 });
             } else {
                 execute(() -> {
                     task.data.sort(Comparator.naturalOrder());
-                    masterPrx.addSortingResults(id, String.valueOf(task.id), task.data);
+                    masterPrx.addSortingResults(id, task.id, task.data);
                 });
             }
         }
