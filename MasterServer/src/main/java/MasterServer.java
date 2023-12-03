@@ -30,7 +30,7 @@ public class MasterServer {
 
         MasterI master = new MasterI(
                 new ConcurrentLinkedQueue<>(), new ConcurrentHashMap<>(),
-                new ConcurrentHashMap<>());
+                new ConcurrentHashMap<>(), new ConcurrentHashMap<>());
         adapter.add(master, Util.stringToIdentity("Master"));
         adapter.activate();
         System.out.println("Master has been started.");

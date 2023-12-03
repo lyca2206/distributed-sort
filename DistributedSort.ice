@@ -2,21 +2,25 @@ module AppInterface
 {
     sequence<string> seqStr;
 
-    ["java:implements:java.lang.Runnable"]
-    class Task {
-        seqStr data;
-    };
-
     interface Worker
     {
         void launch();
+        void addGroupResults(seqStr array);
+        void addSortResults(seqStr array);
         void shutdown();
+    };
+
+    ["java:implements:java.lang.Runnable"]
+    class Task {
+        Worker* worker;
+        seqStr data;
     };
 
     interface Master
     {
         void signUp(string id, Worker* worker);
-        Object getTask(string id);
-        void addPartialResults(seqStr array);
+        Task getTask(string id);
+        void addGroupResults(seqStr array);
+        void addSortResults(seqStr array);
     };
 };

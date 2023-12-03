@@ -2,12 +2,18 @@ import AppInterface.MasterPrx;
 import AppInterface.Task;
 import com.zeroc.Ice.Current;
 
-public class WorkerI implements AppInterface.Worker {
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+
+public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
     private final MasterPrx masterPrx;
     private final String id;
     private boolean isRunning;
 
-    public WorkerI(MasterPrx masterPrx, String id) {
+    public WorkerI(int corePoolSize, int maximumPoolSize, long keepAliveTime, TimeUnit unit,
+                   BlockingQueue<Runnable> workQueue, MasterPrx masterPrx, String id) {
+        super(corePoolSize, maximumPoolSize, keepAliveTime, unit, workQueue);
         this.masterPrx = masterPrx;
         this.id = id;
         isRunning = false;
@@ -16,21 +22,31 @@ public class WorkerI implements AppInterface.Worker {
     @Override
     public void launch(Current current) {
         isRunning = true;
-        startTaskPolling();
+        Thread thread = new Thread(this::startTaskPolling);
+        thread.start();
     }
 
     private void startTaskPolling() {
         while (isRunning) {
-            getThenExecuteTask();
+            if (getPoolSize() < getMaximumPoolSize()) { getThenExecuteTask(); }
         }
     }
 
     public void getThenExecuteTask() {
-        Task task = (Task) masterPrx.getTask(id);
+        Task task = masterPrx.getTask(id);
         if (task != null) {
-            task.run();
-            masterPrx.addPartialResults(task.data);
+            execute(task);
         }
+    }
+
+    @Override
+    public void addGroupResults(String[] array, Current current) {
+        masterPrx.addGroupResults(array);
+    }
+
+    @Override
+    public void addSortResults(String[] array, Current current) {
+        masterPrx.addSortResults(array);
     }
 
     @Override

@@ -5,6 +5,8 @@ import com.zeroc.Ice.ObjectAdapter;
 import com.zeroc.Ice.Util;
 
 import java.net.UnknownHostException;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 
 public class WorkerServer {
     public static void main(String[] args) {
@@ -41,8 +43,8 @@ public class WorkerServer {
     private static WorkerPrx createWorkerProxy(Communicator communicator, MasterPrx masterPrx) {
         ObjectAdapter adapter = communicator.createObjectAdapter("WorkerServer");
 
-        WorkerI worker = new WorkerI(masterPrx,
-                communicator.getProperties().getProperty("WorkerServer.ID"));
+        WorkerI worker = new WorkerI(0, 16, 32, TimeUnit.SECONDS, new LinkedBlockingQueue<>(),
+                masterPrx, communicator.getProperties().getProperty("ID"));
         adapter.add(worker, Util.stringToIdentity("Worker"));
 
         adapter.activate();

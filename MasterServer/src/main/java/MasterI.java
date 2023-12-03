@@ -9,9 +9,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.util.Arrays;
-import java.util.Map;
-import java.util.Queue;
+import java.util.*;
 import java.util.stream.Stream;
 
 public class MasterI implements AppInterface.Master {
@@ -21,11 +19,19 @@ public class MasterI implements AppInterface.Master {
     private final Map<String, WorkerPrx> workers;
     private final Map<String, Task> currentTasks;
 
-    public MasterI(Queue<Task> queue, Map<String, WorkerPrx> workers, Map<String, Task> currentTasks) {
+    private final Map<String, List<String>> groups;
+
+    public MasterI(Queue<Task> queue, Map<String, WorkerPrx> workers, Map<String, Task> currentTasks, Map<String, List<String>> groups) {
         this.queue = queue;
         this.workers = workers;
         this.currentTasks = currentTasks;
+        this.groups = groups;
     }
+
+
+    long startTime;
+    long endTime;
+
 
     @Override
     public void signUp(String id, WorkerPrx worker, Current current) {
@@ -38,7 +44,10 @@ public class MasterI implements AppInterface.Master {
             System.out.println("Enter the name of the file to be sorted. Be aware that you need to deploy the Workers first.");
             String fileName = "./" + br.readLine();
 
+            startTime = System.currentTimeMillis();
+
             createTasks(fileName);
+            System.out.println(queue.toString());
             launchWorkers();
         }
     }
@@ -47,7 +56,7 @@ public class MasterI implements AppInterface.Master {
         try (BufferedReader br = new BufferedReader(new FileReader(fileName))) {
             long fileSize = getFileSize(fileName);
             long listSize = getLineCount(fileName);
-            long taskAmount = fileSize / CACHE_SIZE;
+            long taskAmount = fileSize * 32 / CACHE_SIZE;
             long taskSize = listSize / taskAmount;
 
             for (long i = 0; i < taskAmount; i++) {
@@ -85,19 +94,28 @@ public class MasterI implements AppInterface.Master {
     }
 
     private Task createGroupingTask(String[] data) {
-        return new Task(data) {
+        return new Task(null, data) {
             @Override
             public void run() {
-                //TODO.
+                Map<String, ArrayList<String>> map = new HashMap<>();
+                for (String s : data) {
+                    String key = s.substring(0, 2);
+                    if (map.containsKey(key)) { map.get(key).add(s); }
+                    else { map.put(key, new ArrayList<>()); }
+                }
+                for (ArrayList<String> list : map.values()) {
+                    this.worker.addGroupResults(list.toArray(new String[0]));
+                }
             }
         };
     }
 
     private Task createSortingTask(String[] data) {
-        return new Task(data) {
+        return new Task(null, data) {
             @Override
             public void run() {
-                Arrays.parallelSort(data);
+                Arrays.sort(data);
+                worker.addSortResults(data);
             }
         };
     }
@@ -107,19 +125,30 @@ public class MasterI implements AppInterface.Master {
     }
 
     @Override
-    public Value getTask(String id, Current current) {
+    public Task getTask(String id, Current current) {
         Task task = queue.poll();
         currentTasks.put(id, task);
         return task;
     }
 
     @Override
-    public void addPartialResults(String[] array, Current current) {
-        //TODO.
+    public void addGroupResults(String[] array, Current current) {
+        String key = array[0].substring(0, 2);
+        if (groups.containsKey(key)) {
+            List<String> list = groups.get(key);
+            list.addAll(Arrays.asList(array));
+        } else {
+            groups.put(key, Arrays.asList(array));
+        }
+
+        if (queue.isEmpty()) {
+            endTime = System.currentTimeMillis();
+            System.out.println((endTime - startTime) / 1000);
+        }
     }
 
-    private void processResults() {
-        //TODO.
+    @Override
+    public void addSortResults(String[] array, Current current) {
     }
 
     private void shutdownWorkers() {
