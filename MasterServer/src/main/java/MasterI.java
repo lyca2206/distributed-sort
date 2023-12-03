@@ -43,24 +43,32 @@ public class MasterI implements AppInterface.Master {
             System.out.println("Enter the name of the file to be sorted. Be aware that you need to deploy the Workers first.");
             String fileName = "./" + br.readLine();
 
-            startTime = System.currentTimeMillis();
+            startTime = System.nanoTime();
 
-            createTasks(fileName);
+            createGroupingTasks(fileName);
+            System.out.println("Line 49: "+queue.toString());
             launchWorkers();
         }
     }
 
-    private void createTasks(String fileName) throws IOException {
+    private void createGroupingTasks(String fileName) throws IOException {
         try (BufferedReader br = new BufferedReader(new FileReader(fileName))) {
             long fileSize = getFileSize(fileName);
             long listSize = getLineCount(fileName);
+
             long taskAmount = fileSize * 8 / L2_CACHE;
+            taskAmount = Math.max(1, taskAmount);
+
             long taskSize = listSize / taskAmount;
+
             int characters = (int) (Math.log(taskAmount) / Math.log(26 * 2 + 10));
+            characters = Math.max(1, characters);
+
+            System.out.println("Line 62: "+characters);
 
             for (long i = 0; i < taskAmount; i++) {
                 String[] data = readData(br, taskSize);
-                Task task = createGroupingTask(data, characters);
+                Task task = new GroupingTask(data, new HashMap<>(), characters);
                 queue.add(task);
             }
         }
@@ -92,28 +100,6 @@ public class MasterI implements AppInterface.Master {
         return data;
     }
 
-    private Task createGroupingTask(String[] data, int characters) {
-        return new GroupingTask(data, new HashMap<>(), characters) {
-            @Override
-            public void run() {
-                for (String string : data) {
-                    String key = string.substring(0, characters);
-                    if (groups.containsKey(key)) { groups.get(key).add(string); }
-                    else { groups.put(key, new ArrayList<>()); }
-                }
-            }
-        };
-    }
-
-    private Task createSortingTask(String[] data) {
-        return new Task(data) {
-            @Override
-            public void run() {
-                Arrays.sort(data);
-            }
-        };
-    }
-
     private void launchWorkers() {
         workers.values().forEach(WorkerPrx::launch);
     }
@@ -121,7 +107,9 @@ public class MasterI implements AppInterface.Master {
     @Override
     public Task getTask(String id, Current current) {
         Task task = queue.poll();
-        currentTasks.put(id, task);
+        if (task != null) {
+            currentTasks.put(id, task);
+        }
         return task;
     }
 
@@ -140,8 +128,9 @@ public class MasterI implements AppInterface.Master {
         });
 
         if (queue.isEmpty()) {
-            endTime = System.currentTimeMillis();
-            System.out.println((endTime - startTime) / 1000);
+            endTime = System.nanoTime();
+            System.out.println("Line 132: "+(endTime - startTime) / 1000000);
+            localGroups.keySet().forEach((key) -> {System.out.println("Line 133: " + key + ": " + localGroups.get(key).size());});
         }
     }
 

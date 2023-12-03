@@ -7,12 +7,10 @@ module AppInterface
 
     dictionary<string, ArrayList> dictStrSeq;
 
-    ["java:implements:java.lang.Runnable"]
     class Task {
         seqStr data;
     };
 
-    ["java:implements:java.lang.Runnable"]
     class GroupingTask extends Task {
         dictStrSeq groups;
         int characters;

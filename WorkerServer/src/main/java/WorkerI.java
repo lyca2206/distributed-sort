@@ -3,6 +3,8 @@ import AppInterface.MasterPrx;
 import AppInterface.Task;
 import com.zeroc.Ice.Current;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -11,6 +13,7 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
     private final MasterPrx masterPrx;
     private final String id;
     private boolean isRunning;
+    private Task task;
 
     public WorkerI(int corePoolSize, int maximumPoolSize, long keepAliveTime,
                    TimeUnit unit, BlockingQueue<Runnable> workQueue, MasterPrx masterPrx, String id) {
@@ -33,20 +36,33 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
         }
     }
 
-    public void getThenExecuteTask() {
-        Task task = masterPrx.getTask(id);
+    private void getThenExecuteTask() {
+        task = masterPrx.getTask(id);
         if (task != null) {
-            execute(task);
+            if (task instanceof GroupingTask groupingTask) {
+                execute(() -> {
+                    for (String string : groupingTask.data) {
+                        String key = string.substring(0, groupingTask.characters);
+                        if (groupingTask.groups.containsKey(key)) { groupingTask.groups.get(key).add(string); }
+                        else { groupingTask.groups.put(key, new ArrayList<>()); }
+                    }
+                });
+            } else {
+                execute(() -> {
+                    Arrays.sort(task.data);
+                });
+            }
         }
     }
 
     @Override
     protected void afterExecute(Runnable r, Throwable t) {
-        Task task = (Task) r;
-        if (task instanceof GroupingTask) {
-            masterPrx.addGroupingResults(((GroupingTask) task).groups);
-        } else {
-            masterPrx.addPartialResults(task.data);
+        if (task != null) {
+            if (task instanceof GroupingTask) {
+                masterPrx.addGroupingResults(((GroupingTask) task).groups);
+            } else {
+                masterPrx.addPartialResults(task.data);
+            }
         }
     }
 
