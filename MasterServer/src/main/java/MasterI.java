@@ -17,19 +17,19 @@ public class MasterI implements AppInterface.Master {
     private final Map<String, WorkerPrx> workers;
     private final Map<String, Map<String, Task>> currentTasks;
     private final Map<String, List<String>> groups;
-    private final long pingMilis;
+    private final long pingMillis;
 
     private boolean isProcessing;
     private long addingToResults;
 
     public MasterI(Queue<Task> queue, Map<String, WorkerPrx> workers,
                    Map<String, Map<String, Task>> currentTasks,
-                   Map<String, List<String>> groups, long pingMilis) {
+                   Map<String, List<String>> groups, long pingMillis) {
         this.queue = queue;
         this.workers = workers;
         this.currentTasks = currentTasks;
         this.groups = groups;
-        this.pingMilis = pingMilis;
+        this.pingMillis = pingMillis;
         isProcessing = false;
         addingToResults = 0;
     }
@@ -88,7 +88,7 @@ public class MasterI implements AppInterface.Master {
                 catch (TimeoutException e) {
                     resetTasks(key);}
             });
-            try { Thread.sleep(pingMilis); }
+            try { Thread.sleep(pingMillis); }
             catch (InterruptedException e) { throw new RuntimeException(e); }
         }
     }
@@ -110,18 +110,15 @@ public class MasterI implements AppInterface.Master {
 
             for (long i = 0; i < taskAmount; i++) {
                 ArrayList<String> data = readData(br, taskSize);
-
-                // Crear el archivo temporal
-                String tempFileName = createTempFile(data, i);
-
-                // TODO: Actualiza la creación de la tarea para utilizar el nuevo archivo temporal
+                createGroupInFile(data, i);
+                //TODO: Remove HashMap in Constructor.
                 Task task = new GroupingTask(String.valueOf(i), new HashMap<>(), characters);
                 queue.add(task);
             }
         }
     }
 
-    private String createTempFile(ArrayList<String> data, long index) throws IOException {
+    private void createGroupInFile(ArrayList<String> data, long index) throws IOException {
         String fileName = "/temp/" + index;
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(fileName))) {
             for (String line : data) {
@@ -129,7 +126,6 @@ public class MasterI implements AppInterface.Master {
                 writer.newLine();
             }
         }
-        return fileName;
     }
 
     private long getFileSize(String fileName) throws IOException {
@@ -234,12 +230,16 @@ public class MasterI implements AppInterface.Master {
 
     @Override
     public void addGroupingResults(String workerId, String taskId, Current current) {
+        addingToResults++;
         currentTasks.get(workerId).remove(taskId);
+        addingToResults--;
     }
 
     @Override
     public void addSortingResults(String workerId, String taskId, Current current) {
+        addingToResults++;
         currentTasks.get(workerId).remove(taskId);
+        addingToResults--;
     }
 
     private void shutdownWorkers() {
