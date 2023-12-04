@@ -31,8 +31,6 @@ public class MasterServer {
         Properties properties = communicator.getProperties();
         long pingMilis = Long.parseLong(properties.getProperty("pingMilis"));
 
-        System.out.println(pingMilis);
-
         MasterI master = new MasterI(
                 new ConcurrentLinkedQueue<>(), new ConcurrentHashMap<>(),
                 new ConcurrentHashMap<>(), new ConcurrentSkipListMap<>(), pingMilis);
