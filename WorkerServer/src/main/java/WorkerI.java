@@ -1,31 +1,32 @@
 import AppInterface.MasterPrx;
-import AppInterface.MergeTask;
+//import AppInterface.MergeTask;
 import AppInterface.StringSortTask;
 import AppInterface.Task;
 import com.zeroc.Ice.Communicator;
 import com.zeroc.Ice.Current;
 import sorter.MSDRadixSortTask;
-import merger.MergeArraysTask;
+//import merger.MergeArraysTask;
 import java.util.concurrent.ForkJoinPool;
 
 public class WorkerI implements AppInterface.Worker {
     private final MasterPrx masterPrx;
     private final Communicator communicator;
     private volatile boolean isShutdown;
-
     private ForkJoinPool pool;
+    private final int threads;
 
     private int workerId;
 
-    public WorkerI(MasterPrx masterPrx, Communicator communicator) {
+    public WorkerI(MasterPrx masterPrx, Communicator communicator, int threads) {
         this.masterPrx = masterPrx;
         isShutdown = false;
         this.communicator = communicator;
+        this.threads = threads;
     }
 
     @Override
     public void launch(Current current) {
-        pool = new ForkJoinPool(4);
+        pool = new ForkJoinPool(threads-2);
         startWorker();
     }
 
@@ -57,14 +58,14 @@ public class WorkerI implements AppInterface.Worker {
             response = processSortTask((StringSortTask) task);
             t2 = System.currentTimeMillis();
             System.out.printf("Finished StringSortTask processing! (%d ms)\n",t2-t1);
-        }
+        }/*
         else if (task instanceof MergeTask){
             System.out.println("Started MergeTask processing!");
             t1 = System.currentTimeMillis();
             response = processMergeTask((MergeTask) task);
             t2 = System.currentTimeMillis();
             System.out.printf("Finished MergeTask processing! (%d ms)\n",t2-t1);
-        }
+        }*/
         else if (task == null) {
             Thread.sleep(1500);
             return;
@@ -87,7 +88,7 @@ public class WorkerI implements AppInterface.Worker {
 
         return array;
     }
-
+    /*
     private String[] processMergeTask(MergeTask mergeTask){
         String[] array1 = mergeTask.array1;
         String[] array2 = mergeTask.array2;
@@ -96,7 +97,7 @@ public class WorkerI implements AppInterface.Worker {
 
         return pool.invoke(task);
     }
-
+    */
 
     @Override
     public void shutdown(Current current) {

@@ -1,6 +1,7 @@
 import AppInterface.*;
 import com.zeroc.Ice.Communicator;
 import com.zeroc.Ice.Current;
+import merger.MergeArraysTask;
 
 import java.io.*;
 import java.nio.file.Files;
@@ -16,9 +17,11 @@ public class MasterI implements AppInterface.Master {
     private final List<WorkerPrx> activeWorkersPrx = new ArrayList<>();
     private final List<WorkerPrx> inactiveWorkersPrx = new ArrayList<>();
     private final Queue<Task> tasks = new ConcurrentLinkedQueue<>();
+    private final BlockingQueue<Task> localTasks = new LinkedBlockingQueue<>();
+    private final ForkJoinPool forkJoinPool;
     private final BlockingQueue<String []> partialResults = new LinkedBlockingQueue<>();
-    private static final int MAX_THREADS = 4;
-    private static final int LINES_PER_TASK = 1000000; //Number of Strings per task
+    private final int maxThreads;
+    private final int linesPerTask; //Number of Strings per task
     private final AtomicInteger taskIdCounter = new AtomicInteger();
     private final AtomicInteger completedTasksCounter = new AtomicInteger();
     private final Communicator communicator;
@@ -32,9 +35,9 @@ public class MasterI implements AppInterface.Master {
     private final HashMap<WorkerPrx,Integer> workersIds;
     private ExecutorService thPool;
     private long endTime = -1;
-    private boolean isDoneSorting = false;
+    private volatile boolean isDoneSorting = false;
     private int workerIdCounter = 0;
-    public MasterI(List<WorkerPrx> prxList, Communicator communicator) {
+    public MasterI(List<WorkerPrx> prxList, Communicator communicator, int maxThreads, int linesPerTask) {
         this.prxList = prxList;
         inactiveWorkersPrx.addAll(prxList);
         sentTasksTimes = new HashMap<>();
@@ -42,6 +45,28 @@ public class MasterI implements AppInterface.Master {
         workersTasks = new HashMap<>();
         workersIds = new HashMap<>();
         this.communicator = communicator;
+
+        this.maxThreads = maxThreads;
+        this.linesPerTask = linesPerTask;
+
+        thPool = Executors.newFixedThreadPool(3);
+        forkJoinPool = new ForkJoinPool(maxThreads-3);
+        workersTasks.put(-1,ConcurrentHashMap.newKeySet());
+    }
+
+    private void localTaskExecutionLoop() {
+        try {
+            for (int i = 0; i < totalMergeTasks; i++) {
+                MergeTask mergeTask = (MergeTask) localTasks.take();
+                System.out.printf("Start local task %d/%d (%s) \n", mergeTask.taskId, totalTasks, mergeTask.type);
+                sentTasks.put(mergeTask.taskId,mergeTask);
+                sentTasksTimes.put(mergeTask.taskId,System.currentTimeMillis());
+
+                workersTasks.get(-1).add(mergeTask.taskId);
+                MergeArraysTask mergeArraysTask = new MergeArraysTask(mergeTask.array1, mergeTask.array2);
+                addPartialResults(mergeTask.taskId,-1,forkJoinPool.invoke(mergeArraysTask),null);
+            }
+        } catch (InterruptedException ignored) { }
     }
 
     @Override
@@ -111,6 +136,7 @@ public class MasterI implements AppInterface.Master {
                 String fileName = "./" + line;
 
                 //Create tasks
+                sortingStartTime = System.currentTimeMillis();
                 readFileAndCreateSortTasks(fileName);
                 isFileOk = true;
                 int totalSortTasks = tasks.size();
@@ -119,17 +145,19 @@ public class MasterI implements AppInterface.Master {
                 totalTasks = totalSortTasks + totalMergeTasks;
 
                 //Initialize master pool for background processes
-                thPool = Executors.newFixedThreadPool(MAX_THREADS);
                 thPool.execute(this::createMergeTasks);
 
                 //Launch workers
                 numRequiredWorkers = calculateNumWorkers(getLineCount(fileName));
                 System.out.println("Launching " + numRequiredWorkers + " workers...");
-                sortingStartTime = System.currentTimeMillis();
+
                 launchWorkers(numRequiredWorkers);
 
                 //Runs thread that checks workers health
                 thPool.execute(this::checkWorkers);
+
+                //Runs thread that executes local tasks
+                thPool.execute(this::localTaskExecutionLoop);
 
                 System.out.println("Launched workers!");
                 System.out.println("Sorting started");
@@ -146,8 +174,8 @@ public class MasterI implements AppInterface.Master {
             List<String> lines = fileStream.collect(Collectors.toList());
 
             // Divides the file in small data chunks
-            for (int i = 0; i < lines.size(); i += MasterI.LINES_PER_TASK) {
-                int end = Math.min(i + MasterI.LINES_PER_TASK, lines.size());
+            for (int i = 0; i < lines.size(); i += linesPerTask) {
+                int end = Math.min(i + linesPerTask, lines.size());
                 String[] chunk = lines.subList(i, end).toArray(new String[0]);
                 tasks.offer(new StringSortTask(TaskType.SORT, taskIdCounter.incrementAndGet(),chunk));
             }
@@ -217,7 +245,7 @@ public class MasterI implements AppInterface.Master {
 
                 int taskId = taskIdCounter.incrementAndGet();
 
-                tasks.offer(new MergeTask(TaskType.MERGE,taskId,partialResult1,partialResult2));
+                localTasks.offer(new MergeTask(TaskType.MERGE,taskId,partialResult1,partialResult2));
                 System.out.printf("Created task %d/%d (%s) \n", taskId, totalTasks, TaskType.MERGE);
             }
         } catch (InterruptedException e) {
@@ -228,14 +256,13 @@ public class MasterI implements AppInterface.Master {
     @Override
     public void addPartialResults(int taskId, int workerId, String[] array, Current current) {
 
-        if(!workersTasks.get(workerId).contains(taskId))
+        if(!workersTasks.get(workerId).contains(taskId) && workerId != -1)
             return;
 
         partialResults.add(array);
         markTaskAsCompleted(taskId,workerId);
 
         if(completedTasksCounter.get() == totalTasks){
-            endTime = System.currentTimeMillis();
             thPool.execute(this::processResults);
         }
 
@@ -259,14 +286,16 @@ public class MasterI implements AppInterface.Master {
     private void processResults() {
         isDoneSorting = true;
         String[] sortedArray = partialResults.poll();
-
         System.out.println("Sorting finished");
-        System.out.println("Time: " + (endTime- sortingStartTime) + " ms");
         assert sortedArray != null;
         System.out.println("Total strings sorted: " + sortedArray.length);
-        System.out.println("Array is ordered: " + checkOrder(sortedArray));
         writeOutput(sortedArray);
+        endTime = System.currentTimeMillis();
+        System.out.println("Time: " + (endTime- sortingStartTime) + " ms");
+        System.out.println("Array is ordered: " + checkOrder(sortedArray));
         shutdownWorkers();
+        thPool.shutdown();
+        communicator.shutdown();
     }
 
     private void writeOutput(String[] array){
@@ -285,9 +314,6 @@ public class MasterI implements AppInterface.Master {
         }
         Long t2 = System.currentTimeMillis();
         System.out.println("Finish Writing to ./" + fileName + " (" + (t2-t1) + " ms)");
-        isDoneSorting = true;
-        thPool.shutdown();
-        communicator.shutdown();
     }
 
     private long getLineCount(String fileName) throws IOException {

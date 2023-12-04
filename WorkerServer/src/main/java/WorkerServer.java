@@ -2,6 +2,7 @@ import AppInterface.MasterPrx;
 import AppInterface.WorkerPrx;
 import com.zeroc.Ice.Communicator;
 import com.zeroc.Ice.ObjectAdapter;
+import com.zeroc.Ice.Properties;
 import com.zeroc.Ice.Util;
 
 import java.net.UnknownHostException;
@@ -18,8 +19,12 @@ public class WorkerServer {
     private static void serverInit(String[] args) throws InterruptedException, UnknownHostException {
         try(Communicator communicator = Util.initialize(args, "worker.cfg"))
         {
+            Properties properties = communicator.getProperties();
+
+            int threads = Integer.parseInt(properties.getProperty("Threads"));
+
             MasterPrx masterPrx = createMasterProxy(communicator);
-            WorkerI worker = new WorkerI(masterPrx, communicator);
+            WorkerI worker = new WorkerI(masterPrx, communicator, threads);
             WorkerPrx workerPrx = createWorkerProxy(communicator,masterPrx,worker);
 
             int workerId = masterPrx.signUp(workerPrx);
