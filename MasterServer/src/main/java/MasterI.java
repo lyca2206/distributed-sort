@@ -10,6 +10,7 @@ import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 public class MasterI implements AppInterface.Master {
@@ -61,6 +62,8 @@ public class MasterI implements AppInterface.Master {
         createGroupingTasks(fileName, batchSize);
         doNextStepAfterFinalization();
 
+        mergeGroupingTasksResults();
+
         createSortingTasks();
         doNextStepAfterFinalization();
         isProcessing = false;
@@ -71,8 +74,56 @@ public class MasterI implements AppInterface.Master {
         long endTime = System.nanoTime();
 
         System.out.println("Time: " + (endTime - startTime) + " ns.");
+        for(File file: Objects.requireNonNull(new File("./temp/").listFiles())){
+            if (!file.isDirectory()) {
+                if (!file.delete()) {
+                    System.out.println("Could not delete file " + file);
+                }
+            }
+        }
         if (isSorted()) { System.out.println("The list has been sorted successfully."); }
         else { System.out.println("An error has happened."); }
+    }
+
+    public void mergeGroupingTasksResults() throws IOException {
+
+        Set<String> groupsToMerge = groups.keySet(); //This is an ordered set
+
+        for (String group : groupsToMerge) {
+            String groupFileName = getFileName(group);
+
+            File[] groupFiles = listTempFilesMatching(groupFileName+".*");
+
+            BufferedWriter bw = new BufferedWriter(new FileWriter(groupFileName));
+            for (File file : groupFiles) {
+                BufferedReader br = new BufferedReader(new FileReader(file));
+
+                String line = br.readLine();
+                while (line != null) {
+                    bw.write(line + "\n");
+                    line = br.readLine();
+                }
+                br.close();
+            }
+            //TODO may be pertinent to call garbage collector
+            bw.close();
+        }
+    }
+
+    /**
+     *
+     * @param regex Regex
+     * @return Array of files that match regex on ./temp/ folder
+     */
+    public static File[] listTempFilesMatching(String regex) {
+        File root = new File("./temp/");
+
+        if(!root.isDirectory()) {
+            throw new IllegalArgumentException(root+" is no directory.");
+        }
+
+        final Pattern p = Pattern.compile(regex);
+        return root.listFiles(file -> p.matcher(file.getName()).matches());
     }
 
     private void launchWorkers() {
