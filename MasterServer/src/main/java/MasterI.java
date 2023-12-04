@@ -111,6 +111,7 @@ public class MasterI implements AppInterface.Master {
                 String fileName = "./" + line;
 
                 //Create tasks
+                sortingStartTime = System.currentTimeMillis();
                 readFileAndCreateSortTasks(fileName);
                 isFileOk = true;
                 int totalSortTasks = tasks.size();
@@ -125,7 +126,7 @@ public class MasterI implements AppInterface.Master {
                 //Launch workers
                 numRequiredWorkers = calculateNumWorkers(getLineCount(fileName));
                 System.out.println("Launching " + numRequiredWorkers + " workers...");
-                sortingStartTime = System.currentTimeMillis();
+
                 launchWorkers(numRequiredWorkers);
 
                 //Runs thread that checks workers health
@@ -235,7 +236,6 @@ public class MasterI implements AppInterface.Master {
         markTaskAsCompleted(taskId,workerId);
 
         if(completedTasksCounter.get() == totalTasks){
-            endTime = System.currentTimeMillis();
             thPool.execute(this::processResults);
         }
 
@@ -261,12 +261,17 @@ public class MasterI implements AppInterface.Master {
         String[] sortedArray = partialResults.poll();
 
         System.out.println("Sorting finished");
-        System.out.println("Time: " + (endTime- sortingStartTime) + " ms");
+
         assert sortedArray != null;
         System.out.println("Total strings sorted: " + sortedArray.length);
         System.out.println("Array is ordered: " + checkOrder(sortedArray));
         writeOutput(sortedArray);
+
+        endTime = System.currentTimeMillis();
+        System.out.println("Time: " + (endTime- sortingStartTime) + " ms");
         shutdownWorkers();
+        thPool.shutdown();
+        communicator.shutdown();
     }
 
     private void writeOutput(String[] array){
@@ -285,9 +290,7 @@ public class MasterI implements AppInterface.Master {
         }
         Long t2 = System.currentTimeMillis();
         System.out.println("Finish Writing to ./" + fileName + " (" + (t2-t1) + " ms)");
-        isDoneSorting = true;
-        thPool.shutdown();
-        communicator.shutdown();
+
     }
 
     private long getLineCount(String fileName) throws IOException {
