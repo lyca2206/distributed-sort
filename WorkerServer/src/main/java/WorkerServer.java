@@ -2,6 +2,7 @@ import AppInterface.MasterPrx;
 import AppInterface.WorkerPrx;
 import com.zeroc.Ice.Communicator;
 import com.zeroc.Ice.ObjectAdapter;
+import com.zeroc.Ice.Properties;
 import com.zeroc.Ice.Util;
 
 import java.net.UnknownHostException;
@@ -43,8 +44,14 @@ public class WorkerServer {
     private static WorkerPrx createWorkerProxy(Communicator communicator, MasterPrx masterPrx) {
         ObjectAdapter adapter = communicator.createObjectAdapter("WorkerServer");
 
-        WorkerI worker = new WorkerI(0, 16, 32, TimeUnit.SECONDS, new LinkedBlockingQueue<>(),
-                masterPrx, communicator.getProperties().getProperty("ID"));
+        Properties properties = communicator.getProperties();
+        int corePoolSize = Integer.parseInt(properties.getProperty("corePoolSize"));
+        int maximumPoolSize = Integer.parseInt(properties.getProperty("maximumPoolSize"));
+        long keepAliveTime = Long.parseLong(properties.getProperty("keepAliveTime"));
+        String id = properties.getProperty("ID");
+
+        WorkerI worker = new WorkerI(
+                corePoolSize, maximumPoolSize, keepAliveTime, TimeUnit.SECONDS, new LinkedBlockingQueue<>(), masterPrx, id);
         adapter.add(worker, Util.stringToIdentity("Worker"));
 
         adapter.activate();

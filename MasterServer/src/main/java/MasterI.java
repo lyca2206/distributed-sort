@@ -19,16 +19,19 @@ public class MasterI implements AppInterface.Master {
     private final Map<String, WorkerPrx> workers;
     private final Map<String, Map<String, Task>> currentTasks;
     private final Map<String, List<String>> groups;
+    private final long pingMilis;
 
     private boolean isProcessing;
     private long addingToResults;
 
     public MasterI(Queue<Task> queue, Map<String, WorkerPrx> workers,
-                   Map<String, Map<String, Task>> currentTasks, Map<String, List<String>> groups) {
+                   Map<String, Map<String, Task>> currentTasks,
+                   Map<String, List<String>> groups, long pingMilis) {
         this.queue = queue;
         this.workers = workers;
         this.currentTasks = currentTasks;
         this.groups = groups;
+        this.pingMilis = pingMilis;
         isProcessing = false;
         addingToResults = 0;
     }
@@ -87,7 +90,7 @@ public class MasterI implements AppInterface.Master {
                 catch (TimeoutException e) {
                     resetTasks(key);}
             });
-            try { Thread.sleep(5000); }
+            try { Thread.sleep(pingMilis); }
             catch (InterruptedException e) { throw new RuntimeException(e); }
         }
     }

@@ -1,5 +1,6 @@
 import com.zeroc.Ice.Communicator;
 import com.zeroc.Ice.ObjectAdapter;
+import com.zeroc.Ice.Properties;
 import com.zeroc.Ice.Util;
 
 import java.io.IOException;
@@ -27,9 +28,14 @@ public class MasterServer {
     private static void serviceInit(Communicator communicator) throws IOException {
         ObjectAdapter adapter = communicator.createObjectAdapter("MasterServer");
 
+        Properties properties = communicator.getProperties();
+        long pingMilis = Long.parseLong(properties.getProperty("pingMilis"));
+
+        System.out.println(pingMilis);
+
         MasterI master = new MasterI(
                 new ConcurrentLinkedQueue<>(), new ConcurrentHashMap<>(),
-                new ConcurrentHashMap<>(), new ConcurrentSkipListMap<>());
+                new ConcurrentHashMap<>(), new ConcurrentSkipListMap<>(), pingMilis);
         adapter.add(master, Util.stringToIdentity("Master"));
         adapter.activate();
         System.out.println("Master has been started.");
