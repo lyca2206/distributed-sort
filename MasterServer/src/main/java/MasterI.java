@@ -4,10 +4,7 @@ import AppInterface.WorkerPrx;
 import com.zeroc.Ice.Current;
 import com.zeroc.Ice.TimeoutException;
 
-import java.io.BufferedReader;
-import java.io.FileReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
+import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.*;
@@ -47,14 +44,15 @@ public class MasterI implements AppInterface.Master {
         {
             System.out.println("Enter the name of the file to be sorted. Be aware that you need to deploy the Workers first.");
             String fileName = "./" + br.readLine();
-
-            System.out.println("Sorting has started.");
-            startProcessing(fileName);
+            sort(fileName);
         }
     }
 
-    private void startProcessing(String fileName) throws IOException {
+    private void sort(String fileName) throws IOException {
+        System.out.println("Sorting has started.");
+
         long startTime = System.nanoTime();
+
         isProcessing = true;
         launchWorkers();
         new Thread(this::startPingingWorkers).start();
@@ -67,17 +65,13 @@ public class MasterI implements AppInterface.Master {
         isProcessing = false;
 
         shutdownWorkers();
-        processAndServeResult();
+        processAndServeResult(fileName);
+
         long endTime = System.nanoTime();
 
-        AtomicLong listSize = new AtomicLong();
-        groups.values().forEach((list) -> {
-            listSize.addAndGet(list.size());
-        });
-
-        System.out.println(listSize);
         System.out.println("Time: " + (endTime - startTime) + " ns.");
-
+        if (isSorted()) { System.out.println("The list has been sorted successfully."); }
+        else { System.out.println("An error has happened."); }
     }
 
     private void launchWorkers() {
@@ -108,9 +102,6 @@ public class MasterI implements AppInterface.Master {
         try (BufferedReader br = new BufferedReader(new FileReader(fileName))) {
             long fileSize = getFileSize(fileName);
             long listSize = getLineCount(fileName);
-
-            System.out.println(listSize);
-
             long taskAmount = fileSize * (4 * 2) / L2_CACHE + 1;
             long taskSize = listSize / taskAmount + 1;
             int characters = (int) (Math.log(taskAmount) / Math.log(26 * 2 + 10)) + 1;
@@ -160,8 +151,35 @@ public class MasterI implements AppInterface.Master {
         });
     }
 
-    private void processAndServeResult() {
-        //TODO.
+    private void processAndServeResult(String fileName) throws IOException {
+        String[] directory = fileName.split("/");
+        String newFileName = "sorted_" + directory[directory.length - 1];
+
+        BufferedWriter bw = new BufferedWriter(new FileWriter(newFileName));
+        try {
+            for (List<String> list : groups.values()) {
+                for (String string : list) {
+                    bw.write(string);
+                    bw.newLine();
+                }
+            }
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        bw.close();
+    }
+
+    private boolean isSorted() {
+        String previous = null;
+        for (List<String> list : groups.values()) {
+            for (String string : list) {
+                if (previous == null) { previous = string; }
+                else if (string.compareTo(previous) < 0) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     @Override

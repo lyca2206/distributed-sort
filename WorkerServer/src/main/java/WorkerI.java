@@ -63,5 +63,6 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
     @Override
     public void shutdown(Current current) {
         isRunning = false;
+        shutdown();
     }
 }
