@@ -3,8 +3,13 @@ import AppInterface.MasterPrx;
 import AppInterface.Task;
 import com.zeroc.Ice.Current;
 
+import java.io.BufferedReader;
+import java.io.FileNotFoundException;
+import java.io.FileReader;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -40,30 +45,41 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
 
     private void getThenExecuteTask() {
         Task task = masterPrx.getTask(id);
+        List<String> list = readFile(task.fileName);
         if (task != null) {
             if (task instanceof GroupingTask) {
                 GroupingTask groupingTask = (GroupingTask) task;
                 execute(() -> {
-                    //TODO.
-                    /*
-                    for (String string : groupingTask.data) {
+                    for (String string : list) {
                         String key = string.substring(0, groupingTask.characters);
                         if (!groupingTask.groups.containsKey(key)) { groupingTask.groups.put(key, new ArrayList<>()); }
                         groupingTask.groups.get(key).add(string);
                     }
+                    //TODO. Change this method. This needs the .ice redefined.
                     masterPrx.addGroupingResults(id, groupingTask.id, groupingTask.groups);
-                     */
                 });
             } else {
+                //TODO. Change this method. This needs the .ice redefined.
                 execute(() -> {
-                    //TODO.
-                    /*
-                    task.data.sort(Comparator.naturalOrder());
-                    masterPrx.addSortingResults(id, task.id, task.data);
-                     */
+                    list.sort(Comparator.naturalOrder());
+                    masterPrx.addSortingResults(id, task.id, list);
                 });
             }
         }
+    }
+
+    private List<String> readFile(String fileName) {
+        List<String> list = new ArrayList<>();
+        try (BufferedReader br = new BufferedReader(new FileReader("/temp/" + fileName))) {
+            String line = br.readLine();
+            while(line != null) {
+                list.add(line);
+                line = br.readLine();
+            }
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        return list;
     }
 
     @Override
