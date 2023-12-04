@@ -167,7 +167,7 @@ public class MasterI implements AppInterface.Master {
         while(groupsIterator.hasNext()) {
             String group = groupsIterator.next();
 
-            String file = getFileName(group);
+            String file = "./temp/" + getFileName(group);
 
             BufferedReader br = new BufferedReader(new FileReader(file));
 
