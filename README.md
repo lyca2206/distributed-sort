@@ -10,3 +10,5 @@
 - Se deben configurar los archivos .cfg respectivos en cada JAR. Ambos necesitan el host del Master para funcionar. El Worker también necesita de su propio host.
 
 - En cada JAR se debe configurar el archivo META-INF y poner el directorio del JAR de ICE 3.7.10. Esto implica que también hay que desplegar este componente.
+
+- Para ejecutar cada JAR, se debe emplear el comando 'java -jar [Nombre del JAR]'.
