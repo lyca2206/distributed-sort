@@ -6,6 +6,7 @@ module AppInterface
 
     class Task {
         TaskType type;
+        int taskId;
     };
 
     class StringSortTask extends Task{
@@ -21,12 +22,13 @@ module AppInterface
     {
         void launch();
         void shutdown();
+        int ping();
     };
 
     interface Master
     {
-        void signUp(Worker* worker);
-        Task getTask();
-        void addPartialResults(seqStr array);
+        int signUp(Worker* worker);
+        Task getTask(int workerId);
+        void addPartialResults(int taskId, int workerId, seqStr array);
     };
 };

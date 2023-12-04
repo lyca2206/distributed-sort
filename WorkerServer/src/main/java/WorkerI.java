@@ -2,27 +2,30 @@ import AppInterface.MasterPrx;
 import AppInterface.MergeTask;
 import AppInterface.StringSortTask;
 import AppInterface.Task;
+import com.zeroc.Ice.Communicator;
 import com.zeroc.Ice.Current;
 import sorter.MSDRadixSortTask;
 import merger.MergeArraysTask;
-
-import java.util.Arrays;
 import java.util.concurrent.ForkJoinPool;
 
 public class WorkerI implements AppInterface.Worker {
     private final MasterPrx masterPrx;
+    private final Communicator communicator;
     private volatile boolean isShutdown;
 
     private ForkJoinPool pool;
 
-    public WorkerI(MasterPrx masterPrx) {
+    private int workerId;
+
+    public WorkerI(MasterPrx masterPrx, Communicator communicator) {
         this.masterPrx = masterPrx;
         isShutdown = false;
+        this.communicator = communicator;
     }
 
     @Override
     public void launch(Current current) {
-        pool = new ForkJoinPool(15);
+        pool = new ForkJoinPool(4);
         startWorker();
     }
 
@@ -31,58 +34,67 @@ public class WorkerI implements AppInterface.Worker {
             System.out.println("Worker launched");
             while (!isShutdown) {
                 System.out.println("Task requested");
-                requestTask();
                 try {
-                    Thread.sleep(2000);
-                } catch (InterruptedException e) {
-                    throw new RuntimeException(e);
-                }
+                    requestTask();
+                } catch (InterruptedException ignored) {}
             }
             shutdown();
         }).start();
     }
 
-    private void requestTask(){
-        Task task = masterPrx.getTask();
+    private void requestTask() throws InterruptedException {
 
+        long t1 = System.currentTimeMillis();
+        Task task = masterPrx.getTask(workerId);
+        long t2 = System.currentTimeMillis();
+        System.out.printf("Task arrived (%d ms)\n",t2-t1);
 
+        String[] response;
 
         if(task instanceof StringSortTask){
             System.out.println("Started StringSortTask processing!");
-            processSortTask((StringSortTask) task);
-            System.out.println("Finished StringSortTask processing!");
+            t1 = System.currentTimeMillis();
+            response = processSortTask((StringSortTask) task);
+            t2 = System.currentTimeMillis();
+            System.out.printf("Finished StringSortTask processing! (%d ms)\n",t2-t1);
         }
         else if (task instanceof MergeTask){
             System.out.println("Started MergeTask processing!");
-            processMergeTask((MergeTask) task);
-            System.out.println("Finished MergeTask processing!");
+            t1 = System.currentTimeMillis();
+            response = processMergeTask((MergeTask) task);
+            t2 = System.currentTimeMillis();
+            System.out.printf("Finished MergeTask processing! (%d ms)\n",t2-t1);
+        }
+        else if (task == null) {
+            Thread.sleep(1500);
+            return;
         }
         else{
             throw  new UnsupportedOperationException("The provided task is not supported!");
         }
+        System.out.println("Sent response!");
+        t1 = System.currentTimeMillis();
+        masterPrx. addPartialResults(task.taskId, workerId,response);
+        t2 = System.currentTimeMillis();
+        System.out.printf("Time to sent! (%d ms)\n",t2-t1);
     }
 
-    private void processSortTask(StringSortTask sortTask){
+    private String[] processSortTask(StringSortTask sortTask){
         String[] array = sortTask.array;
-
-        System.out.println("BEFORE: " + Arrays.toString( array));
 
         MSDRadixSortTask task = new MSDRadixSortTask(sortTask.array);
         pool.invoke(task);
 
-        System.out.println("AFTER: " + Arrays.toString( array));
-
-        masterPrx.addPartialResults(array);
+        return array;
     }
 
-    private void processMergeTask(MergeTask mergeTask){
+    private String[] processMergeTask(MergeTask mergeTask){
         String[] array1 = mergeTask.array1;
         String[] array2 = mergeTask.array2;
 
         MergeArraysTask task = new MergeArraysTask(array1, array2);
-        String[] mergedArray = pool.invoke(task);
 
-        masterPrx.addPartialResults(mergedArray);
+        return pool.invoke(task);
     }
 
 
@@ -91,9 +103,18 @@ public class WorkerI implements AppInterface.Worker {
         isShutdown = true;
     }
 
-    private void shutdown(){
-        pool.shutdown();
-        //Shutdown server (terminate server)???
+    @Override
+    public int ping(Current current) {
+        return workerId;
     }
 
+    private void shutdown(){
+        System.out.println("Shutting down");
+        pool.shutdown();
+        communicator.shutdown();
+    }
+
+    public void setId(int workerId) {
+        this.workerId = workerId;
+    }
 }

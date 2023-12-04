@@ -10,12 +10,12 @@ public class MasterServer {
     public static void main(String[] args) {
         try {
             serverInit(args);
-        } catch (IOException e) {
+        } catch (IOException | InterruptedException e) {
             throw new RuntimeException(e);
         }
     }
 
-    private static void serverInit(String[] args) throws IOException {
+    private static void serverInit(String[] args) throws IOException, InterruptedException {
         try(Communicator communicator = Util.initialize(args, "master.cfg"))
         {
             serviceInit(communicator);
@@ -29,8 +29,7 @@ public class MasterServer {
         ObjectAdapter adapter = communicator.createObjectAdapter("MasterServer");
 
         MasterI master = new MasterI(
-                Collections.synchronizedList(new LinkedList<>())
-        );
+                Collections.synchronizedList(new LinkedList<>()),communicator);
         adapter.add(master, Util.stringToIdentity("Master"));
         adapter.activate();
         System.out.println("Master has been started.");

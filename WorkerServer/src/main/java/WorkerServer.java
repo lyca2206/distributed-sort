@@ -19,9 +19,11 @@ public class WorkerServer {
         try(Communicator communicator = Util.initialize(args, "worker.cfg"))
         {
             MasterPrx masterPrx = createMasterProxy(communicator);
-            WorkerPrx workerPrx = createWorkerProxy(communicator, masterPrx);
+            WorkerI worker = new WorkerI(masterPrx, communicator);
+            WorkerPrx workerPrx = createWorkerProxy(communicator,masterPrx,worker);
 
-            masterPrx.signUp(workerPrx);
+            int workerId = masterPrx.signUp(workerPrx);
+            worker.setId(workerId);
             System.out.println("Worker has been started.");
 
             communicator.waitForShutdown();
@@ -38,10 +40,9 @@ public class WorkerServer {
         return masterPrx;
     }
 
-    private static WorkerPrx createWorkerProxy(Communicator communicator, MasterPrx masterPrx) {
+    private static WorkerPrx createWorkerProxy(Communicator communicator, MasterPrx masterPrx, WorkerI worker) {
         ObjectAdapter adapter = communicator.createObjectAdapter("WorkerServer");
 
-        WorkerI worker = new WorkerI(masterPrx);
         adapter.add(worker, Util.stringToIdentity("Worker"));
 
         adapter.activate();
