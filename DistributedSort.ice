@@ -7,7 +7,6 @@ module AppInterface
 
     class Task {
         string id;
-        string fileName;
     };
 
     class GroupingTask extends Task {
@@ -26,7 +25,7 @@ module AppInterface
     {
         void signUp(string workerId, Worker* worker);
         Task getTask(string workerId);
-        void addGroupingResults(string workerId, string taskId, Map groups);
-        void addSortingResults(string workerId, string taskId, ArrayList array);
+        void addGroupingResults(string workerId, string taskId);
+        void addSortingResults(string workerId, string taskId);
     };
 };

@@ -45,7 +45,7 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
 
     private void getThenExecuteTask() {
         Task task = masterPrx.getTask(id);
-        List<String> list = readFile(task.fileName);
+        List<String> list = readFile(task.id);
         if (task != null) {
             if (task instanceof GroupingTask) {
                 GroupingTask groupingTask = (GroupingTask) task;
@@ -55,14 +55,14 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
                         if (!groupingTask.groups.containsKey(key)) { groupingTask.groups.put(key, new ArrayList<>()); }
                         groupingTask.groups.get(key).add(string);
                     }
-                    //TODO. Change this method. This needs the .ice redefined.
-                    masterPrx.addGroupingResults(id, groupingTask.id, groupingTask.groups);
+                    //TODO. Send file (groupingTask.id) through FTP.
+                    masterPrx.addGroupingResults(id, groupingTask.id);
                 });
             } else {
-                //TODO. Change this method. This needs the .ice redefined.
+                //TODO. Send file (groupingTask.id) through FTP.
                 execute(() -> {
                     list.sort(Comparator.naturalOrder());
-                    masterPrx.addSortingResults(id, task.id, list);
+                    masterPrx.addSortingResults(id, task.id);
                 });
             }
         }

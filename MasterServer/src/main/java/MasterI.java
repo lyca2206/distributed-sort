@@ -111,7 +111,7 @@ public class MasterI implements AppInterface.Master {
             for (long i = 0; i < taskAmount; i++) {
                 ArrayList<String> data = readData(br, taskSize);
                 //TODO.
-                Task task = new GroupingTask(String.valueOf(i), "data", new HashMap<>(), characters);
+                Task task = new GroupingTask(String.valueOf(i), new HashMap<>(), characters);
                 queue.add(task);
             }
         }
@@ -150,7 +150,7 @@ public class MasterI implements AppInterface.Master {
     private void createSortingTasks() {
         groups.forEach((key, list) -> {
             //TODO.
-            Task task = new Task(key, "list");
+            Task task = new Task(key);
             queue.add(task);
         });
     }
@@ -194,23 +194,13 @@ public class MasterI implements AppInterface.Master {
     }
 
     @Override
-    public void addGroupingResults(String workerId, String taskId, Map<String, List<String>> groups, Current current) {
+    public void addGroupingResults(String workerId, String taskId, Current current) {
         currentTasks.get(workerId).remove(taskId);
-        addingToResults++;
-        Map<String, List<String>> localGroups = this.groups;
-        groups.keySet().forEach((key) -> {
-            if (!localGroups.containsKey(key)) { localGroups.put(key, groups.get(key)); }
-            else { localGroups.get(key).addAll(groups.get(key)); }
-        });
-        addingToResults--;
     }
 
     @Override
-    public void addSortingResults(String workerId, String taskId, List<String> array, Current current) {
+    public void addSortingResults(String workerId, String taskId, Current current) {
         currentTasks.get(workerId).remove(taskId);
-        addingToResults++;
-        groups.put(taskId, array);
-        addingToResults--;
     }
 
     private void shutdownWorkers() {
