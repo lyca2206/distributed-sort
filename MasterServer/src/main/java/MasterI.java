@@ -18,19 +18,19 @@ public class MasterI implements AppInterface.Master {
     private final Map<String, WorkerPrx> workers;
     private final Map<String, Map<String, Task>> currentTasks;
     private final Map<String, List<String>> groups;
-    private final long pingMilis;
+    private final long pingMillis;
 
     private boolean isProcessing;
     private long addingToResults;
 
     public MasterI(Queue<Task> queue, Map<String, WorkerPrx> workers,
                    Map<String, Map<String, Task>> currentTasks,
-                   Map<String, List<String>> groups, long pingMilis) {
+                   Map<String, List<String>> groups, long pingMillis) {
         this.queue = queue;
         this.workers = workers;
         this.currentTasks = currentTasks;
         this.groups = groups;
-        this.pingMilis = pingMilis;
+        this.pingMillis = pingMillis;
         isProcessing = false;
         addingToResults = 0;
     }
@@ -139,7 +139,7 @@ public class MasterI implements AppInterface.Master {
                 catch (TimeoutException e) {
                     resetTasks(key);}
             });
-            try { Thread.sleep(pingMilis); }
+            try { Thread.sleep(pingMillis); }
             catch (InterruptedException e) { throw new RuntimeException(e); }
         }
     }
@@ -161,9 +161,20 @@ public class MasterI implements AppInterface.Master {
 
             for (long i = 0; i < taskAmount; i++) {
                 ArrayList<String> data = readData(br, taskSize);
-                //TODO.
-                Task task = new GroupingTask(String.valueOf(i), "data", new HashMap<>(), characters);
+                createGroupInFile(data, i);
+                //TODO: Remove HashMap in Constructor.
+                Task task = new GroupingTask(String.valueOf(i), new HashMap<>(), characters);
                 queue.add(task);
+            }
+        }
+    }
+
+    private void createGroupInFile(ArrayList<String> data, long index) throws IOException {
+        String fileName = "/temp/" + index;
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(fileName))) {
+            for (String line : data) {
+                writer.write(line);
+                writer.newLine();
             }
         }
     }
@@ -201,7 +212,7 @@ public class MasterI implements AppInterface.Master {
     private void createSortingTasks() {
         groups.forEach((key, list) -> {
             //TODO.
-            Task task = new Task(key, "list");
+            Task task = new Task(key);
             queue.add(task);
         });
     }
@@ -269,22 +280,16 @@ public class MasterI implements AppInterface.Master {
     }
 
     @Override
-    public void addGroupingResults(String workerId, String taskId, Map<String, List<String>> groups, Current current) {
-        currentTasks.get(workerId).remove(taskId);
+    public void addGroupingResults(String workerId, String taskId, Current current) {
         addingToResults++;
-        Map<String, List<String>> localGroups = this.groups;
-        groups.keySet().forEach((key) -> {
-            if (!localGroups.containsKey(key)) { localGroups.put(key, groups.get(key)); }
-            else { localGroups.get(key).addAll(groups.get(key)); }
-        });
+        currentTasks.get(workerId).remove(taskId);
         addingToResults--;
     }
 
     @Override
-    public void addSortingResults(String workerId, String taskId, List<String> array, Current current) {
-        currentTasks.get(workerId).remove(taskId);
+    public void addSortingResults(String workerId, String taskId, Current current) {
         addingToResults++;
-        groups.put(taskId, array);
+        currentTasks.get(workerId).remove(taskId);
         addingToResults--;
     }
 
