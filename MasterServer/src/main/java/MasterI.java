@@ -110,7 +110,8 @@ public class MasterI implements AppInterface.Master {
 
             for (long i = 0; i < taskAmount; i++) {
                 ArrayList<String> data = readData(br, taskSize);
-                Task task = new GroupingTask(String.valueOf(i), data, new HashMap<>(), characters);
+                //TODO.
+                Task task = new GroupingTask(String.valueOf(i), "data", new HashMap<>(), characters);
                 queue.add(task);
             }
         }
@@ -148,7 +149,8 @@ public class MasterI implements AppInterface.Master {
 
     private void createSortingTasks() {
         groups.forEach((key, list) -> {
-            Task task = new Task(key, list);
+            //TODO.
+            Task task = new Task(key, "list");
             queue.add(task);
         });
     }

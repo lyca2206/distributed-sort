@@ -7,7 +7,7 @@ module AppInterface
 
     class Task {
         string id;
-        ArrayList data;
+        string fileName;
     };
 
     class GroupingTask extends Task {

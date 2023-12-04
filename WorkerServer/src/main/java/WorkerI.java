@@ -44,17 +44,23 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
             if (task instanceof GroupingTask) {
                 GroupingTask groupingTask = (GroupingTask) task;
                 execute(() -> {
+                    //TODO.
+                    /*
                     for (String string : groupingTask.data) {
                         String key = string.substring(0, groupingTask.characters);
                         if (!groupingTask.groups.containsKey(key)) { groupingTask.groups.put(key, new ArrayList<>()); }
                         groupingTask.groups.get(key).add(string);
                     }
                     masterPrx.addGroupingResults(id, groupingTask.id, groupingTask.groups);
+                     */
                 });
             } else {
                 execute(() -> {
+                    //TODO.
+                    /*
                     task.data.sort(Comparator.naturalOrder());
                     masterPrx.addSortingResults(id, task.id, task.data);
+                     */
                 });
             }
         }
