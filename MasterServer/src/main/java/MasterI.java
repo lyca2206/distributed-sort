@@ -13,8 +13,6 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Stream;
 
 public class MasterI implements AppInterface.Master {
-    private static final long L3_CACHE = 16777216;
-
     private final Queue<Task> queue;
     private final Map<String, WorkerPrx> workers;
     private final Map<String, Map<String, Task>> currentTasks;
@@ -42,16 +40,16 @@ public class MasterI implements AppInterface.Master {
         currentTasks.put(workerId, new ConcurrentHashMap<>());
     }
 
-    public void initialize(long divider) throws IOException {
+    public void initialize(long batchSize) throws IOException {
         try(BufferedReader br = new BufferedReader(new InputStreamReader(System.in)))
         {
             System.out.println("Enter the name of the file to be sorted. Be aware that you need to deploy the Workers first.");
             String fileName = "./" + br.readLine();
-            sort(fileName, divider);
+            sort(fileName, batchSize);
         }
     }
 
-    private void sort(String fileName, long divider) throws IOException {
+    private void sort(String fileName, long batchSize) throws IOException {
         System.out.println("Sorting has started.");
 
         long startTime = System.nanoTime();
@@ -60,7 +58,7 @@ public class MasterI implements AppInterface.Master {
         launchWorkers();
         new Thread(this::startPingingWorkers).start();
 
-        createGroupingTasks(fileName, divider);
+        createGroupingTasks(fileName, batchSize);
         doNextStepAfterFinalization();
 
         createSortingTasks();
@@ -102,11 +100,11 @@ public class MasterI implements AppInterface.Master {
         workers.remove(key);
     }
 
-    private void createGroupingTasks(String fileName, long divider) throws IOException {
+    private void createGroupingTasks(String fileName, long batchSize) throws IOException {
         try (BufferedReader br = new BufferedReader(new FileReader(fileName))) {
             long fileSize = getFileSize(fileName);
             long listSize = getLineCount(fileName);
-            long taskAmount = fileSize * divider / L3_CACHE + 1;
+            long taskAmount = fileSize / batchSize + 1;
             long taskSize = listSize / taskAmount + 1;
             int characters = (int) (Math.log(taskAmount) / Math.log(26 * 2 + 10)) + 1;
 

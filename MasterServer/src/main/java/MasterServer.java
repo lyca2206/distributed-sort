@@ -30,7 +30,7 @@ public class MasterServer {
 
         Properties properties = communicator.getProperties();
         long pingMilis = Long.parseLong(properties.getProperty("pingMilis"));
-        long divider = Long.parseLong(properties.getProperty("divider"));
+        long batchSize = Long.parseLong(properties.getProperty("batchSize"));
 
         MasterI master = new MasterI(
                 new ConcurrentLinkedQueue<>(), new ConcurrentHashMap<>(),
@@ -39,6 +39,6 @@ public class MasterServer {
         adapter.activate();
         System.out.println("Master has been started.");
 
-        master.initialize(divider);
+        master.initialize(batchSize);
     }
 }
