@@ -157,21 +157,45 @@ public class MasterI implements AppInterface.Master {
 
     private void processAndServeResult(String fileName) throws IOException {
         String[] directory = fileName.split("/");
-        String newFileName = "sorted_" + directory[directory.length - 1];
+        String outFile = "sorted_" + directory[directory.length - 1];
 
-        BufferedWriter bw = new BufferedWriter(new FileWriter(newFileName));
-        try {
-            for (List<String> list : groups.values()) {
-                for (String string : list) {
-                    bw.write(string);
-                    bw.newLine();
-                }
+        Set<String> groupsToMerge = groups.keySet(); //This is an ordered set
+        Iterator<String> groupsIterator = groupsToMerge.iterator();
+
+
+        BufferedWriter bw = new BufferedWriter(new FileWriter(outFile));
+        while(groupsIterator.hasNext()) {
+            String group = groupsIterator.next();
+
+            String file = getFileName(group);
+
+            BufferedReader br = new BufferedReader(new FileReader(file));
+
+            String line = br.readLine();
+
+            while(line != null){
+                bw.write(line + "\n");
+                line = br.readLine();
             }
-        } catch (IOException e) {
-            throw new RuntimeException(e);
+
+            br.close();
         }
         bw.close();
     }
+
+    /**
+     * Given a group such as "aa" returns its corresponding filename represented in integer of char
+     * "aa" return "97_97_", "a" returns "97_"
+     */
+    private String getFileName(String group){
+        StringBuilder fileName = new StringBuilder();
+        for (int i = 0; i < group.length(); i++) {
+            int letter = group.charAt(i);
+            fileName.append(letter).append("_");
+        }
+        return fileName.toString();
+    }
+
 
     private boolean isSorted() {
         String previous = null;
