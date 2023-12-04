@@ -13,7 +13,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Stream;
 
 public class MasterI implements AppInterface.Master {
-    private static final long L2_CACHE = 4194304;
+    private static final long L3_CACHE = 16777216;
 
     private final Queue<Task> queue;
     private final Map<String, WorkerPrx> workers;
@@ -42,16 +42,16 @@ public class MasterI implements AppInterface.Master {
         currentTasks.put(workerId, new ConcurrentHashMap<>());
     }
 
-    public void initialize() throws IOException {
+    public void initialize(long divider) throws IOException {
         try(BufferedReader br = new BufferedReader(new InputStreamReader(System.in)))
         {
             System.out.println("Enter the name of the file to be sorted. Be aware that you need to deploy the Workers first.");
             String fileName = "./" + br.readLine();
-            sort(fileName);
+            sort(fileName, divider);
         }
     }
 
-    private void sort(String fileName) throws IOException {
+    private void sort(String fileName, long divider) throws IOException {
         System.out.println("Sorting has started.");
 
         long startTime = System.nanoTime();
@@ -60,7 +60,7 @@ public class MasterI implements AppInterface.Master {
         launchWorkers();
         new Thread(this::startPingingWorkers).start();
 
-        createGroupingTasks(fileName);
+        createGroupingTasks(fileName, divider);
         doNextStepAfterFinalization();
 
         createSortingTasks();
@@ -96,16 +96,17 @@ public class MasterI implements AppInterface.Master {
     }
 
     private void resetTasks(String key) {
+        System.out.println("Worker " + key + " has been discarded (timeout).");
         Map<String, Task> map = currentTasks.remove(key);
         queue.addAll(map.values());
         workers.remove(key);
     }
 
-    private void createGroupingTasks(String fileName) throws IOException {
+    private void createGroupingTasks(String fileName, long divider) throws IOException {
         try (BufferedReader br = new BufferedReader(new FileReader(fileName))) {
             long fileSize = getFileSize(fileName);
             long listSize = getLineCount(fileName);
-            long taskAmount = fileSize * (4 * 2) / L2_CACHE + 1;
+            long taskAmount = fileSize * divider / L3_CACHE + 1;
             long taskSize = listSize / taskAmount + 1;
             int characters = (int) (Math.log(taskAmount) / Math.log(26 * 2 + 10)) + 1;
 
