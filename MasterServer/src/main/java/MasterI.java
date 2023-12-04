@@ -110,11 +110,26 @@ public class MasterI implements AppInterface.Master {
 
             for (long i = 0; i < taskAmount; i++) {
                 ArrayList<String> data = readData(br, taskSize);
-                //TODO.
+
+                // Crear el archivo temporal
+                String tempFileName = createTempFile(data, i);
+
+                // TODO: Actualiza la creación de la tarea para utilizar el nuevo archivo temporal
                 Task task = new GroupingTask(String.valueOf(i), new HashMap<>(), characters);
                 queue.add(task);
             }
         }
+    }
+
+    private String createTempFile(ArrayList<String> data, long index) throws IOException {
+        String fileName = "/temp/" + index;
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(fileName))) {
+            for (String line : data) {
+                writer.write(line);
+                writer.newLine();
+            }
+        }
+        return fileName;
     }
 
     private long getFileSize(String fileName) throws IOException {
