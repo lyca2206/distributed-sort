@@ -21,6 +21,7 @@ public class MasterI implements AppInterface.Master {
 
     private boolean isProcessing;
     private long addingToResults;
+    private long taskAmount;
 
     public MasterI(Queue<Task> queue, Map<String, WorkerPrx> workers,
                    Map<String, Map<String, Task>> currentTasks,
@@ -105,6 +106,7 @@ public class MasterI implements AppInterface.Master {
             long fileSize = getFileSize(fileName);
             long listSize = getLineCount(fileName);
             long taskAmount = fileSize / batchSize + 1;
+            this.taskAmount = taskAmount;
             long taskSize = listSize / taskAmount + 1;
             int characters = (int) (Math.log(taskAmount) / Math.log(26 * 2 + 10)) + 1;
 
@@ -119,7 +121,7 @@ public class MasterI implements AppInterface.Master {
     }
 
     private void createGroupInFile(ArrayList<String> data, long index) throws IOException {
-        String fileName = "/temp/" + index;
+        String fileName = "./temp/" + index;
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(fileName))) {
             for (String line : data) {
                 writer.write(line);
@@ -159,11 +161,26 @@ public class MasterI implements AppInterface.Master {
     }
 
     private void createSortingTasks() {
+        File file = new File("./temp");
         groups.forEach((key, list) -> {
             //TODO.
             Task task = new Task(key);
             queue.add(task);
         });
+    }
+
+    private List<String> readFile(String fileName) {
+        List<String> list = new ArrayList<>();
+        try (BufferedReader br = new BufferedReader(new FileReader("./temp/" + fileName))) {
+            String line = br.readLine();
+            while(line != null) {
+                list.add(line);
+                line = br.readLine();
+            }
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        return list;
     }
 
     private void processAndServeResult(String fileName) throws IOException {

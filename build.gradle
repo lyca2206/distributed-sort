@@ -19,6 +19,7 @@ subprojects {
 
     dependencies {
         implementation 'com.zeroc:ice:3.7.10'
+        implementation group: 'com.jcraft', name: 'jsch', version: '0.1.55'
     }
 
     jar {
