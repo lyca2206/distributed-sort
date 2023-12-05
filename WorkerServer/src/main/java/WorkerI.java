@@ -99,7 +99,7 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
     private void doMultipleGroupingTasks(List<String> list, GroupingTask task) {
         for (long i = 0; i < task.step; i++) {
             String finalI = String.valueOf(i);
-            execute(() -> { taskForGrouping(list, task, finalI); });
+            execute(() -> { taskForGrouping(list, task, task.index + finalI); });
         }
     }
 
