@@ -3,6 +3,7 @@ import AppInterface.MasterPrx;
 import AppInterface.Task;
 import com.jcraft.jsch.*;
 import com.zeroc.Ice.Current;
+import sorter.MSDRadixSortTask;
 
 import java.io.*;
 import java.util.*;
@@ -16,6 +17,8 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
 
     private boolean isRunning;
 
+    private ForkJoinPool fjPool;
+
     public WorkerI(int corePoolSize, int maximumPoolSize, long keepAliveTime, TimeUnit unit,
                    BlockingQueue<Runnable> workQueue, MasterPrx masterPrx, String masterHost,
                    String masterTemporalPath, String workerHost, String username, String password) {
@@ -24,6 +27,7 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
         this.masterTemporalPath = masterTemporalPath;
         this.workerHost = workerHost;
         isRunning = false;
+        this.fjPool = new ForkJoinPool(maximumPoolSize);
 
         try { session = createSession(username, password, masterHost); } catch (JSchException e) {
             throw new RuntimeException(e);
@@ -74,7 +78,9 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
         if (task != null) {
             List<String> list = readFile(task.key);
             if (task instanceof GroupingTask) { doMultipleGroupingTasks(list, (GroupingTask) task); }
-            else { taskForSorting(list, task); }
+            else {
+                taskForSorting(list, task);
+            }
         }
     }
 
@@ -188,7 +194,13 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
 
     private void taskForSorting(List<String> list, Task task) {
         //TODO. Parallel sorting.
-        list.sort(Comparator.naturalOrder());
+
+        String[] listAsArray = new String[list.size()];
+        list = new ArrayList<>(); //to clear memory
+        fjPool.invoke(new MSDRadixSortTask(list.toArray(listAsArray))); //"inplace"
+        list = Arrays.asList(listAsArray);
+
+        //list.sort(Comparator.naturalOrder());
         try {
             createFile(task.key, list); //The FileName has been formatted from Master, hence why we use 'task.key'.
             sendFileToMaster("./temp/" + task.key, masterTemporalPath);
