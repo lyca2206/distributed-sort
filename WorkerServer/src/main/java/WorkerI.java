@@ -97,13 +97,13 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
     }
 
     private void taskForGrouping(List<String> list, GroupingTask task) {
-        System.out.println("Grouping Task Received.");
+        System.out.println("Grouping task " + task.key +  " received.");
         Map<String, List<String>> groups = separateListIntoGroups(list, task.keyLength);
         System.out.println("Grouping and sending files to master for task " + task.key);
         long t1 = System.currentTimeMillis();
         groups.forEach((key, groupList) -> createFileForGroupAndSendToMaster(task.key, key, groupList));
         long t2 = System.currentTimeMillis();
-        System.out.println("Grouping and sent complete" + (t2-t1) + " ms");
+        System.out.println("Grouping and sent complete (" + (t2-t1) + " ms)");
         masterPrx.addGroupingResults(workerHost, task.key);
     }
 

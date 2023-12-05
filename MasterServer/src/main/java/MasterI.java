@@ -345,7 +345,7 @@ public class MasterI implements AppInterface.Master {
 
     private void sendFileToWorker(String from, String to, String workerHost) {
         try {
-            System.out.println("Sending file " + from + "to " + workerHost + ":" + to);
+            System.out.println("Sending file " + from + " to worker");
             long t1 = System.currentTimeMillis();
             File localFile = new File(from);
 
@@ -357,7 +357,7 @@ public class MasterI implements AppInterface.Master {
             channelSftp.disconnect();
 
             long t2 = System.currentTimeMillis();
-            System.out.println("File sent (" + (t2-t1) + " ms");
+            System.out.println("File sent (" + (t2-t1) + " ms)");
         } catch (JSchException | SftpException | FileNotFoundException e) {
             throw new RuntimeException(e);
         }
@@ -371,14 +371,14 @@ public class MasterI implements AppInterface.Master {
     }
 
     @Override
-    public void addGroupingResults(String workerHost, String taskKey, Current current) { //TODO. Merge with addSortingResults.
+    public void addGroupingResults(String workerHost, String taskKey, Current current) {
         processesAddingToResults++;
         currentTasks.get(workerHost).remove(taskKey);
         processesAddingToResults--;
     }
 
     @Override
-    public void addSortingResults(String workerHost, String taskKey, Current current) { //TODO. Merge with addGroupingResults.
+    public void addSortingResults(String workerHost, String taskKey, Current current) {
         processesAddingToResults++;
         currentTasks.get(workerHost).remove(taskKey);
         processesAddingToResults--;
