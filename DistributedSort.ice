@@ -12,6 +12,7 @@ module AppInterface
     class GroupingTask extends Task {
         long index;
         long step;
+        long taskSize;
         int keyLength;
     };
 

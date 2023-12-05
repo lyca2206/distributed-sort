@@ -104,8 +104,9 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
         System.out.println("Grouping task " + task.key + " received.");
         List<RunnableFuture<Void>> groupingTasks = new ArrayList<>();
         for (long i = 0; i < task.step; i++) {
-            String finalI = String.valueOf(i);
-            Runnable groupTask = () -> taskForGrouping(list, task, finalI);
+            long finalI1 = i;
+            List<String> subList = list.subList((int) (task.taskSize * finalI1), (int) (task.taskSize * (finalI1 + 1)));
+            Runnable groupTask = () -> taskForGrouping(subList, task, String.valueOf(finalI1));
             groupingTasks.add(new FutureTask<>(groupTask,null));
             execute(groupTask);
         }
