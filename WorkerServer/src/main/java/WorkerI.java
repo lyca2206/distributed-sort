@@ -110,7 +110,7 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
         try {
             String groupFileName = getGroupFileName(key) + taskKey;
             createFile(groupFileName, groupList);
-            sendFileToMaster(groupFileName, masterTemporalPath, masterHost);
+            sendFileToMaster("./temp/" + groupFileName, masterTemporalPath, masterHost);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -166,7 +166,7 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
         list.sort(Comparator.naturalOrder());
         try {
             createFile(task.key, list); //The FileName has been formatted from Master, hence why we use 'task.key'.
-            sendFileToMaster(task.key, masterTemporalPath, masterHost);
+            sendFileToMaster("./temp/" + task.key, masterTemporalPath, masterHost);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
