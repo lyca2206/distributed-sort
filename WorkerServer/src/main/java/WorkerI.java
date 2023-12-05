@@ -20,21 +20,21 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
 
     public WorkerI(int corePoolSize, int maximumPoolSize, long keepAliveTime, TimeUnit unit,
                    BlockingQueue<Runnable> workQueue, MasterPrx masterPrx, String masterHost,
-                   String masterTemporalPath, String workerHost) {
+                   String masterTemporalPath, String workerHost, String username, String password) {
         super(corePoolSize, maximumPoolSize, keepAliveTime, unit, workQueue);
         this.masterPrx = masterPrx;
         this.masterTemporalPath = masterTemporalPath;
         this.workerHost = workerHost;
         isRunning = false;
 
-        try { session = createSession(masterHost); } catch (JSchException e) {
+        try { session = createSession(username, password, masterHost); } catch (JSchException e) {
             throw new RuntimeException(e);
         }
     }
 
-    private Session createSession(String workerHost) throws JSchException {
-        Session session = new JSch().getSession("swarch", workerHost, 22);
-        session.setPassword("swarch");
+    private Session createSession(String username, String password, String workerHost) throws JSchException {
+        Session session = new JSch().getSession(username, workerHost, 22);
+        session.setPassword(password);
         session.setConfig("StrictHostKeyChecking", "no");
         return session;
     }
