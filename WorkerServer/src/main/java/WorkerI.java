@@ -6,9 +6,7 @@ import com.zeroc.Ice.Current;
 
 import java.io.*;
 import java.util.*;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 
 public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
     private final MasterPrx masterPrx;
@@ -97,9 +95,17 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
     }
 
     private void doMultipleGroupingTasks(List<String> list, GroupingTask task) {
+        List<RunnableFuture<Void>> groupingTasks = new ArrayList<>();
         for (long i = 0; i < task.step; i++) {
             String finalI = String.valueOf(i);
-            execute(() -> { taskForGrouping(list, task, finalI); });
+            Runnable groupTask = () -> taskForGrouping(list, task, finalI);
+            groupingTasks.add(new FutureTask<>(groupTask,null));
+            execute(groupTask);
+        }
+        for (RunnableFuture<Void> r: groupingTasks) {
+            try { r.get(); } catch (InterruptedException | ExecutionException e) {
+                throw new RuntimeException(e);
+            }
         }
     }
 
