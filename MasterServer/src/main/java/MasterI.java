@@ -123,9 +123,9 @@ public class MasterI implements AppInterface.Master {
             long taskSize = lineAmount / taskAmount + 1;
             int keyLength = (int) (Math.log(taskAmount) / Math.log(26 * 2 + 10)) + 1;
 
-            for (long i = 0; i < taskAmount; i++) { //TODO. We might require to initialize group keys here.
+            for (long i = 0; i < taskAmount; i++) {
                 ArrayList<String> dataChunk = getDataChunk(br, taskSize);
-                createFileForChunk(dataChunk, String.valueOf(i));
+                createFileForChunkAndGatherKeys(dataChunk, String.valueOf(i), keyLength);
                 Task task = new GroupingTask(String.valueOf(i), keyLength);
                 taskQueue.add(task);
             }
@@ -154,17 +154,23 @@ public class MasterI implements AppInterface.Master {
         return dataChunk;
     }
 
-    private void createFileForChunk(ArrayList<String> dataChunk, String fileName) throws IOException {
+    private void createFileForChunkAndGatherKeys(ArrayList<String> dataChunk, String fileName, int keyLength) throws IOException {
         String directory = "./temp/" + fileName;
 
         checkFileRestrictions(new File(directory));
 
         try (BufferedWriter bw = new BufferedWriter(new FileWriter(directory))) {
             for (String line : dataChunk) {
+                gatherKey(line, keyLength);
                 bw.write(line);
                 bw.newLine();
             }
         }
+    }
+
+    private void gatherKey(String line, int keyLength) {
+        String key = line.substring(0, keyLength);
+        groupKeys.add(key);
     }
 
     private void checkFileRestrictions(File file) throws IOException {
