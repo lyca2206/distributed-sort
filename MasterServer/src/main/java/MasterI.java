@@ -130,11 +130,12 @@ public class MasterI implements AppInterface.Master {
             long taskAmount = fileSize / batchSize + 1;
             long taskSize = lineAmount / taskAmount + 1;
             int keyLength = (int) (Math.log(taskAmount) / Math.log(26 * 2 + 10)) + 1;
+            long step = 16;
 
-            for (long i = 0; i < taskAmount; i++) {
+            for (long i = 0; i < taskAmount; i += step) {
                 ArrayList<String> dataChunk = getDataChunk(br, taskSize);
                 createFileForChunkAndGatherKeys(dataChunk, String.valueOf(i), keyLength);
-                Task task = new GroupingTask(String.valueOf(i), keyLength);
+                Task task = new GroupingTask(String.valueOf(i), i, step, keyLength);
                 taskQueue.add(task);
             }
         }

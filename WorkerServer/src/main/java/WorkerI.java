@@ -75,8 +75,8 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
         Task task = masterPrx.getTask(workerHost);
         if (task != null) {
             List<String> list = readFile(task.key);
-            if (task instanceof GroupingTask) { execute(() -> taskForGrouping(list, (GroupingTask) task)); }
-            else { execute(() -> taskForSorting(list, task)); }
+            if (task instanceof GroupingTask) { doMultipleGroupingTasks(list, (GroupingTask) task); }
+            else { taskForSorting(list, task); }
         }
     }
 
@@ -96,13 +96,18 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
         return list;
     }
 
-    private void taskForGrouping(List<String> list, GroupingTask task) {
+    private void doMultipleGroupingTasks(List<String> list, GroupingTask task) {
+        for (long i = 0; i < task.step; i++) {
+            String finalI = String.valueOf(i);
+            execute(() -> { taskForGrouping(list, task, finalI); });
+        }
+    }
+
+    private void taskForGrouping(List<String> list, GroupingTask task, String fileName) {
         System.out.println("Grouping Task Received.");
 
-        //TODO. Various groups need to be grouped here.
-
         Map<String, List<String>> groups = separateListIntoGroups(list, task.keyLength);
-        groups.forEach((key, groupList) -> createFileForGroupAndSendToMaster(task.key, key, groupList));
+        groups.forEach((key, groupList) -> createFileForGroupAndSendToMaster(fileName, key, groupList));
 
         masterPrx.addGroupingResults(workerHost, task.key);
     }
