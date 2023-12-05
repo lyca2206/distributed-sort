@@ -218,7 +218,6 @@ public class MasterI implements AppInterface.Master {
 
         for (String key : groupKeys) {
             String groupFileName = getGroupFileName(key);
-            System.out.println("Group file name =" + groupFileName);
             File[] allGroupFiles = getMatchingTemporaryFiles(groupFileName + ".*");
 
             File groupMergeFile = new File("./temp/" + groupFileName);

@@ -17,7 +17,7 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
 
     private boolean isRunning;
 
-    private ForkJoinPool fjPool;
+    private final ForkJoinPool fjPool;
 
     public WorkerI(int corePoolSize, int maximumPoolSize, long keepAliveTime, TimeUnit unit,
                    BlockingQueue<Runnable> workQueue, MasterPrx masterPrx, String masterHost,
@@ -101,6 +101,7 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
     }
 
     private void doMultipleGroupingTasks(List<String> list, GroupingTask task) {
+        System.out.println("Grouping task " + task.key + " received.");
         List<RunnableFuture<Void>> groupingTasks = new ArrayList<>();
         for (long i = 0; i < task.step; i++) {
             String finalI = String.valueOf(i);
@@ -113,15 +114,18 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
                 throw new RuntimeException(e);
             }
         }
+        masterPrx.addGroupingResults(workerHost, task.key);
     }
 
     private void taskForGrouping(List<String> list, GroupingTask task, String fileName) {
-        System.out.println("Grouping Task Received.");
+        System.out.println("Grouping and sending files to master for task " + task.key);
+        long t1 = System.currentTimeMillis();
 
         Map<String, List<String>> groups = separateListIntoGroups(list, task.keyLength);
         groups.forEach((key, groupList) -> createFileForGroupAndSendToMaster(fileName, key, groupList));
 
-        masterPrx.addGroupingResults(workerHost, task.key);
+        long t2 = System.currentTimeMillis();
+        System.out.println("Grouping and sent complete for task " + task.key + " (" + (t2-t1) + " ms)");
     }
 
     private Map<String, List<String>> separateListIntoGroups(List<String> list, int keyLength) {
@@ -192,14 +196,30 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
         }
     }
 
+    private void sendFilesToMaster(List<File> files, String to) {
+        try {
+            ChannelSftp channelSftp = (ChannelSftp) session.openChannel("sftp");
+            channelSftp.connect();
+            channelSftp.cd(to);
+            for (File file: files) {
+                channelSftp.put(new FileInputStream(file), file.getName());
+            }
+            channelSftp.disconnect();
+        } catch (JSchException | SftpException | FileNotFoundException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     private void taskForSorting(List<String> list, Task task) {
-        //TODO. Parallel sorting.
+        System.out.println("Received sort task " + task.key);
+        long t1 = System.currentTimeMillis();
 
         String[] listAsArray = new String[list.size()];
         list = new ArrayList<>(); //to clear memory
         fjPool.invoke(new MSDRadixSortTask(list.toArray(listAsArray))); //"inplace"
         list = Arrays.asList(listAsArray);
-
+        long t2 = System.currentTimeMillis();
+        System.out.println("Completed sort task " + task.key + " (" + (t2-t1) + " ms)");
         //list.sort(Comparator.naturalOrder());
         try {
             createFile(task.key, list); //The FileName has been formatted from Master, hence why we use 'task.key'.
