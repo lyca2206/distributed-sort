@@ -33,13 +33,13 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
     }
 
     private Session createSession(String username, String password, String masterHost) throws JSchException {
-        System.out.println("Creating SSH session with master at " + username + " " + password + " " + masterHost);
+        System.out.println("Creating SSH session with master at " + username + "@"+ masterHost);
         long t1 = System.currentTimeMillis();
         Session session = new JSch().getSession(username, masterHost, 22);
         session.setPassword(password);
         session.setConfig("StrictHostKeyChecking", "no");
         long t2 = System.currentTimeMillis();
-        System.out.println("Created SSH session with master(" + (t2-t1) + " ms)");
+        System.out.println("Created SSH session with master (" + (t2-t1) + " ms)");
         return session;
     }
 
@@ -97,13 +97,14 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
     }
 
     private void taskForGrouping(List<String> list, GroupingTask task) {
-        System.out.println("Grouping Task Received.");
-
         //TODO. Various groups need to be grouped here.
-
+        System.out.println("Grouping task " + task.key +  " received.");
         Map<String, List<String>> groups = separateListIntoGroups(list, task.keyLength);
+        System.out.println("Grouping and sending files to master for task " + task.key);
+        long t1 = System.currentTimeMillis();
         groups.forEach((key, groupList) -> createFileForGroupAndSendToMaster(task.key, key, groupList));
-
+        long t2 = System.currentTimeMillis();
+        System.out.println("Grouping and sent complete for task " + task.key + " (" + (t2-t1) + " ms)");
         masterPrx.addGroupingResults(workerHost, task.key);
     }
 
@@ -164,16 +165,12 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
 
     private void sendFileToMaster(String from, String to) {
         try {
-            System.out.println("Sending file " + from + "to master at "  + to);
-            long t1 = System.currentTimeMillis();
             File localFile = new File(from);
             ChannelSftp channelSftp = (ChannelSftp) session.openChannel("sftp");
             channelSftp.connect();
             channelSftp.cd(to);
             channelSftp.put(new FileInputStream(localFile), localFile.getName());
             channelSftp.disconnect();
-            long t2 = System.currentTimeMillis();
-            System.out.println("File sent (" + (t2-t1) + " ms");
         } catch (JSchException | SftpException | FileNotFoundException e) {
             throw new RuntimeException(e);
         }
@@ -196,6 +193,7 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
         isRunning = false;
         shutdown();
         session.disconnect();
+        removeTemporalFiles();
     }
 
     private void removeTemporalFiles() {
