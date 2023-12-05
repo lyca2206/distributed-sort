@@ -48,13 +48,12 @@ public class WorkerServer {
         int corePoolSize = Integer.parseInt(properties.getProperty("corePoolSize"));
         int maximumPoolSize = Integer.parseInt(properties.getProperty("maximumPoolSize"));
         long keepAliveTime = Long.parseLong(properties.getProperty("keepAliveTime"));
-        String id = properties.getProperty("ID");
-        String masterHost = properties.getProperty("host");
-        String directory = properties.getProperty("directory");
+        String masterHost = properties.getProperty("masterHost");
+        String masterTemporalPath = properties.getProperty("masterTemporalPath");
+        String workerHost = properties.getProperty("workerHost");
 
         WorkerI worker = new WorkerI(
-                corePoolSize, maximumPoolSize, keepAliveTime, TimeUnit.SECONDS, new LinkedBlockingQueue<>(), masterPrx, id,
-                masterHost, directory);
+                corePoolSize, maximumPoolSize, keepAliveTime, TimeUnit.SECONDS, new LinkedBlockingQueue<>(), masterPrx, masterHost, masterTemporalPath, workerHost);
         adapter.add(worker, Util.stringToIdentity("Worker"));
 
         adapter.activate();

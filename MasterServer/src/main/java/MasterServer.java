@@ -29,8 +29,8 @@ public class MasterServer {
         ObjectAdapter adapter = communicator.createObjectAdapter("MasterServer");
 
         Properties properties = communicator.getProperties();
-        long pingMillis = Long.parseLong(properties.getProperty("pingMillis"));
         long batchSize = Long.parseLong(properties.getProperty("batchSize"));
+        long pingMillis = Long.parseLong(properties.getProperty("pingMillis"));
         String workerTempPath = properties.getProperty("workerTempPath");
 
         MasterI master = new MasterI(

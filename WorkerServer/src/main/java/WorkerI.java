@@ -12,27 +12,27 @@ import java.util.concurrent.TimeUnit;
 
 public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
     private final MasterPrx masterPrx;
-    private final String id;
     private final String masterHost;
-    private final String directory;
+    private final String masterTemporalPath;
+    private final String workerHost;
+
     private boolean isRunning;
-    private static final String MASTER_TEMP_PATH = "/home/swarch/Documents/juanf-test-low-mem/MasterServer/temp";
 
     public WorkerI(int corePoolSize, int maximumPoolSize, long keepAliveTime,
-                   TimeUnit unit, BlockingQueue<Runnable> workQueue, MasterPrx masterPrx, String id, String masterHost, String directory) {
+                   TimeUnit unit, BlockingQueue<Runnable> workQueue, MasterPrx masterPrx,
+                   String masterHost, String masterTemporalPath, String workerHost) {
         super(corePoolSize, maximumPoolSize, keepAliveTime, unit, workQueue);
         this.masterPrx = masterPrx;
-        this.id = id;
-        isRunning = false;
         this.masterHost = masterHost;
-        this.directory = directory;
+        this.masterTemporalPath = masterTemporalPath;
+        this.workerHost = workerHost;
+        isRunning = false;
     }
 
     @Override
     public void launch(Current current) {
         isRunning = true;
-        Thread thread = new Thread(this::startTaskPolling);
-        thread.start();
+        new Thread(this::startTaskPolling).start();
     }
 
     @Override
@@ -45,49 +45,17 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
     }
 
     private void getThenExecuteTask() {
-        Task task = masterPrx.getTask(id);
+        Task task = masterPrx.getTask(workerHost);
         if (task != null) {
             List<String> list = readFile(task.key);
-            if (task instanceof GroupingTask) {
-                System.out.println("GroupingTask Received" + task.key);
-                GroupingTask groupingTask = (GroupingTask) task;
-                execute(() -> {
-                    Map<String, List<String>> groups = new HashMap<>();
-                    for (String string : list) {
-                        String key = string.substring(0, groupingTask.keyLength);
-                        if (groups.containsKey(key)) { groups.put(key, new ArrayList<>()); }
-                        groups.get(key).add(string);
-                    }
-
-                    groups.forEach((key, groupList) -> {
-                        try {
-                            String fileName = getFileName(key) + task.key;
-                            writeFile(fileName, groupList);
-                            sendFileToMaster(fileName);
-                        } catch (IOException | JSchException | SftpException e) {
-                            throw new RuntimeException(e);
-                        }
-                    });
-
-                    masterPrx.addGroupingResults(id, groupingTask.key);
-                });
-            } else {
-                execute(() -> {
-                    list.sort(Comparator.naturalOrder());
-                    try {
-                        writeFile(task.key, list);
-                        sendFileToMaster(task.key);
-                    } catch (IOException | JSchException | SftpException e) {
-                        throw new RuntimeException(e);
-                    }
-                    masterPrx.addSortingResults(id, task.key);
-                });
-            }
+            if (task instanceof GroupingTask) { execute(() -> { taskForGrouping(list, (GroupingTask) task); }); }
+            else { execute(() -> { taskForSorting(list, task); }); }
         }
     }
 
     private List<String> readFile(String fileName) {
         List<String> list = new ArrayList<>();
+
         try (BufferedReader br = new BufferedReader(new FileReader("./temp/" + fileName))) {
             String line = br.readLine();
             while(line != null) {
@@ -97,59 +65,112 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+
         return list;
     }
 
-    private void writeFile(String fileName, List<String> list) throws IOException {
-        File newFile = new File("./temp/" + fileName);
+    private void taskForGrouping(List<String> list, GroupingTask task) {
+        System.out.println("Grouping Task Received.");
+        Map<String, List<String>> groups = getGroups(list, task.keyLength);
+        groups.forEach(this::createGroupFile);
+        masterPrx.addGroupingResults(workerHost, task.key);
+    }
 
-        if(newFile.exists() && !newFile.delete())
-            throw new IOException("Field already exists and could not be deleted " + fileName);
+    private Map<String, List<String>> getGroups(List<String> list, int keyLength) {
+        Map<String, List<String>> groups = new HashMap<>();
 
-        if (!newFile.createNewFile())
-            throw new IOException("Could not create file " + fileName);
+        for (String string : list) {
+            String key = string.substring(0, keyLength);
+            if (!groups.containsKey(key)) { groups.put(key, new ArrayList<>()); }
+            groups.get(key).add(string);
+        }
 
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter(newFile))) {
-            for (String line : list) {
-                writer.write(line);
-                writer.newLine();
+        return groups;
+    }
+
+    private void createGroupFile(String key, List<String> groupList) {
+        try {
+            String groupFileName = getGroupFileName(key) + workerHost;
+            createFile(groupFileName, groupList);
+            sendFileToMaster(groupFileName, masterTemporalPath, masterHost);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private void sendFileToMaster(String from, String to, String masterHost) { //TODO. We gotta reuse the session to send various files.
+        try {
+            File localFile = new File(from);
+
+            Session session = createSession(masterHost);
+            session.connect();
+
+            ChannelSftp channelSftp = (ChannelSftp) session.openChannel("sftp");
+            channelSftp.connect();
+            channelSftp.cd(to);
+            channelSftp.put(new FileInputStream(localFile), localFile.getName());
+            channelSftp.disconnect();
+
+            session.disconnect();
+        } catch (JSchException | SftpException | FileNotFoundException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private Session createSession(String workerHost) throws JSchException {
+        Session session = new JSch().getSession("swarch", workerHost, 22);
+        session.setPassword("swarch");
+        session.setConfig("StrictHostKeyChecking", "no");
+        return session;
+    }
+
+    private String getGroupFileName(String key) {
+        StringBuilder groupFileName = new StringBuilder();
+
+        for (int i = 0; i < key.length(); i++) {
+            int character = key.charAt(i);
+            groupFileName.append(character).append("_");
+        }
+
+        return groupFileName.toString();
+    }
+
+    private void createFile(String fileName, List<String> data) throws IOException {
+        String directory = "./temp/" + fileName;
+
+        checkFileRestrictions(new File(directory));
+
+        try (BufferedWriter bw = new BufferedWriter(new FileWriter(directory))) {
+            for (String line : data) {
+                bw.write(line);
+                bw.newLine();
             }
         }
     }
 
+    private void checkFileRestrictions(File file) throws IOException {
+        if (file.exists() && !file.delete()) {
+            throw new IOException("The file already exists and it couldn't be deleted.");
+        }
+        if (!file.createNewFile()) {
+            throw new IOException("The file couldn't be created.");
+        }
+    }
 
+    private void taskForSorting(List<String> list, Task task) {
+        list.sort(Comparator.naturalOrder());
+        try {
+            createFile(task.key, list);
+            sendFileToMaster(task.key, masterTemporalPath, masterHost);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        masterPrx.addSortingResults(workerHost, task.key);
+    }
 
     @Override
     public void shutdown(Current current) {
         isRunning = false;
         shutdown();
     }
-
-    private String getFileName(String group){
-        StringBuilder fileName = new StringBuilder();
-        for (int i = 0; i < group.length(); i++) {
-            int letter = group.charAt(i);
-            fileName.append(letter).append("_");
-        }
-        return fileName.toString();
-    }
-
-    private void sendFileToMaster(String fileName) throws JSchException, FileNotFoundException, SftpException {
-        //TODO REUTILIZAR LA SESIÓN PARA ENVIAR MULTIPLES ARCHIVOS
-        File localFile = new File("./temp/"+fileName);
-
-        Session session = new JSch().getSession("swarch",masterHost,22);
-        session.setPassword("swarch");
-        session.setConfig("StrictHostKeyChecking", "no");
-        session.connect();
-
-        ChannelSftp channel = (ChannelSftp)session.openChannel("sftp");
-        channel.connect();
-        channel.cd(MASTER_TEMP_PATH);
-        channel.put(new FileInputStream(localFile),localFile.getName());
-        channel.disconnect();
-
-        session.disconnect();
-    }
-
 }

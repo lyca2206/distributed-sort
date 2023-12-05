@@ -122,7 +122,7 @@ public class MasterI implements AppInterface.Master {
 
             for (long i = 0; i < taskAmount; i++) { //TODO. We might require to initialize group keys here.
                 ArrayList<String> dataChunk = getDataChunk(br, taskSize);
-                createFileForChunk(dataChunk, i);
+                createFileForChunk(dataChunk, String.valueOf(i));
                 Task task = new GroupingTask(String.valueOf(i), keyLength);
                 taskQueue.add(task);
             }
@@ -151,7 +151,7 @@ public class MasterI implements AppInterface.Master {
         return dataChunk;
     }
 
-    private void createFileForChunk(ArrayList<String> dataChunk, long fileName) throws IOException {
+    private void createFileForChunk(ArrayList<String> dataChunk, String fileName) throws IOException {
         String directory = "./temp/" + fileName;
 
         checkFileRestrictions(new File(directory));
