@@ -25,7 +25,8 @@ public class MasterI implements AppInterface.Master {
     private long processesAddingToResults;
 
     public MasterI(Queue<Task> taskQueue, Map<String, WorkerPrx> workers,
-                   Map<String, Map<String, Task>> currentTasks, SortedSet<String> groupKeys, long pingMillis, String workerTemporalPath) {
+                   Map<String, Map<String, Task>> currentTasks, SortedSet<String> groupKeys,
+                   long pingMillis, String workerTemporalPath) {
         this.taskQueue = taskQueue;
         this.workers = workers;
         this.currentTasks = currentTasks;
@@ -105,8 +106,10 @@ public class MasterI implements AppInterface.Master {
 
     private void resetWorkerTasks(String workerKey) {
         System.out.println("Worker " + workerKey + " has been discarded (timeout).");
+
         Map<String, Task> currentWorkerTasks = currentTasks.remove(workerKey);
         taskQueue.addAll(currentWorkerTasks.values());
+
         workers.remove(workerKey);
     }
 
@@ -207,6 +210,19 @@ public class MasterI implements AppInterface.Master {
         }
     }
 
+    private void writeFileIntoFile(BufferedWriter bw, File file) throws IOException {
+        BufferedReader br = new BufferedReader(new FileReader(file));
+
+        String line = br.readLine();
+        while (line != null) {
+            bw.write(line);
+            bw.newLine();
+            line = br.readLine();
+        }
+
+        br.close();
+    }
+
     private String getGroupFileName(String key) {
         StringBuilder groupFileName = new StringBuilder();
 
@@ -229,24 +245,11 @@ public class MasterI implements AppInterface.Master {
         return tempDirectory.listFiles((file) -> pattern.matcher(file.getName()).matches());
     }
 
-    private void writeFileIntoFile(BufferedWriter bw, File file) throws IOException {
-        BufferedReader br = new BufferedReader(new FileReader(file));
-
-        String line = br.readLine();
-        while (line != null) {
-            bw.write(line);
-            bw.newLine();
-            line = br.readLine();
-        }
-
-        br.close();
-    }
-
     private void createSortingTasks() {
         System.out.println("Creating Sorting Tasks.");
 
         for (String key : groupKeys) {
-            Task task = new Task(key);
+            Task task = new Task(getGroupFileName(key));
             taskQueue.add(task);
         }
     }

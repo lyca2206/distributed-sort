@@ -52,8 +52,9 @@ public class WorkerServer {
         String masterTemporalPath = properties.getProperty("masterTemporalPath");
         String workerHost = properties.getProperty("workerHost");
 
-        WorkerI worker = new WorkerI(
-                corePoolSize, maximumPoolSize, keepAliveTime, TimeUnit.SECONDS, new LinkedBlockingQueue<>(), masterPrx, masterHost, masterTemporalPath, workerHost);
+        WorkerI worker = new WorkerI(corePoolSize, maximumPoolSize,
+                keepAliveTime, TimeUnit.SECONDS, new LinkedBlockingQueue<>(),
+                masterPrx, masterHost, masterTemporalPath, workerHost);
         adapter.add(worker, Util.stringToIdentity("Worker"));
 
         adapter.activate();

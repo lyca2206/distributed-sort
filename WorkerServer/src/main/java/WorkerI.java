@@ -18,9 +18,9 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
 
     private boolean isRunning;
 
-    public WorkerI(int corePoolSize, int maximumPoolSize, long keepAliveTime,
-                   TimeUnit unit, BlockingQueue<Runnable> workQueue, MasterPrx masterPrx,
-                   String masterHost, String masterTemporalPath, String workerHost) {
+    public WorkerI(int corePoolSize, int maximumPoolSize, long keepAliveTime, TimeUnit unit,
+                   BlockingQueue<Runnable> workQueue, MasterPrx masterPrx, String masterHost,
+                   String masterTemporalPath, String workerHost) {
         super(corePoolSize, maximumPoolSize, keepAliveTime, unit, workQueue);
         this.masterPrx = masterPrx;
         this.masterHost = masterHost;
@@ -71,12 +71,14 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
 
     private void taskForGrouping(List<String> list, GroupingTask task) {
         System.out.println("Grouping Task Received.");
-        Map<String, List<String>> groups = getGroups(list, task.keyLength);
-        groups.forEach(this::createGroupFile);
+
+        Map<String, List<String>> groups = separateListIntoGroups(list, task.keyLength);
+        groups.forEach((key, groupList) -> { createFileForGroupAndSendToMaster(task.key, key, groupList); });
+
         masterPrx.addGroupingResults(workerHost, task.key);
     }
 
-    private Map<String, List<String>> getGroups(List<String> list, int keyLength) {
+    private Map<String, List<String>> separateListIntoGroups(List<String> list, int keyLength) {
         Map<String, List<String>> groups = new HashMap<>();
 
         for (String string : list) {
@@ -88,9 +90,9 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
         return groups;
     }
 
-    private void createGroupFile(String key, List<String> groupList) {
+    private void createFileForGroupAndSendToMaster(String taskKey, String key, List<String> groupList) {
         try {
-            String groupFileName = getGroupFileName(key) + workerHost;
+            String groupFileName = getGroupFileName(key) + taskKey;
             createFile(groupFileName, groupList);
             sendFileToMaster(groupFileName, masterTemporalPath, masterHost);
         } catch (IOException e) {
@@ -98,7 +100,41 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
         }
     }
 
-    private void sendFileToMaster(String from, String to, String masterHost) { //TODO. We gotta reuse the session to send various files.
+    private String getGroupFileName(String key) {
+        StringBuilder groupFileName = new StringBuilder();
+
+        for (int i = 0; i < key.length(); i++) {
+            int character = key.charAt(i);
+            groupFileName.append(character).append("_");
+        }
+
+        return groupFileName.toString();
+    }
+
+    private void createFile(String fileName, List<String> data) throws IOException {
+        String filePath = "./temp/" + fileName;
+
+        checkFileRestrictions(new File(filePath));
+
+        try (BufferedWriter bw = new BufferedWriter(new FileWriter(filePath))) {
+            for (String line : data) {
+                bw.write(line);
+                bw.newLine();
+            }
+        }
+    }
+
+    private void checkFileRestrictions(File file) throws IOException {
+        if (file.exists() && !file.delete()) {
+            throw new IOException("The file already exists and it couldn't be deleted.");
+        }
+        if (!file.createNewFile()) {
+            throw new IOException("The file couldn't be created.");
+        }
+    }
+
+    private void sendFileToMaster(String from, String to, String masterHost) {
+        //TODO. We gotta reuse the session to send various files.
         try {
             File localFile = new File(from);
 
@@ -124,43 +160,10 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
         return session;
     }
 
-    private String getGroupFileName(String key) {
-        StringBuilder groupFileName = new StringBuilder();
-
-        for (int i = 0; i < key.length(); i++) {
-            int character = key.charAt(i);
-            groupFileName.append(character).append("_");
-        }
-
-        return groupFileName.toString();
-    }
-
-    private void createFile(String fileName, List<String> data) throws IOException {
-        String directory = "./temp/" + fileName;
-
-        checkFileRestrictions(new File(directory));
-
-        try (BufferedWriter bw = new BufferedWriter(new FileWriter(directory))) {
-            for (String line : data) {
-                bw.write(line);
-                bw.newLine();
-            }
-        }
-    }
-
-    private void checkFileRestrictions(File file) throws IOException {
-        if (file.exists() && !file.delete()) {
-            throw new IOException("The file already exists and it couldn't be deleted.");
-        }
-        if (!file.createNewFile()) {
-            throw new IOException("The file couldn't be created.");
-        }
-    }
-
     private void taskForSorting(List<String> list, Task task) {
         list.sort(Comparator.naturalOrder());
         try {
-            createFile(task.key, list);
+            createFile(task.key, list); //The FileName has been formatted from Master, hence why we use 'task.key'.
             sendFileToMaster(task.key, masterTemporalPath, masterHost);
         } catch (IOException e) {
             throw new RuntimeException(e);
