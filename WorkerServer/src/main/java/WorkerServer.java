@@ -51,10 +51,13 @@ public class WorkerServer {
         String masterHost = properties.getProperty("masterHost");
         String masterTemporalPath = properties.getProperty("masterTemporalPath");
         String workerHost = properties.getProperty("workerHost");
+        String username = properties.getProperty("username");
+        String password = properties.getProperty("password");
 
         WorkerI worker = new WorkerI(corePoolSize, maximumPoolSize,
                 keepAliveTime, TimeUnit.SECONDS, new LinkedBlockingQueue<>(),
-                masterPrx, masterHost, masterTemporalPath, workerHost);
+                masterPrx, masterHost, masterTemporalPath, workerHost,
+                username, password);
         adapter.add(worker, Util.stringToIdentity("Worker"));
 
         adapter.activate();

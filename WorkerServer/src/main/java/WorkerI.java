@@ -12,7 +12,6 @@ import java.util.concurrent.TimeUnit;
 
 public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
     private final MasterPrx masterPrx;
-    private final String masterHost;
     private final String masterTemporalPath;
     private final String workerHost;
     private final Session session;
@@ -21,22 +20,21 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
 
     public WorkerI(int corePoolSize, int maximumPoolSize, long keepAliveTime, TimeUnit unit,
                    BlockingQueue<Runnable> workQueue, MasterPrx masterPrx, String masterHost,
-                   String masterTemporalPath, String workerHost) {
+                   String masterTemporalPath, String workerHost, String username, String password) {
         super(corePoolSize, maximumPoolSize, keepAliveTime, unit, workQueue);
         this.masterPrx = masterPrx;
-        this.masterHost = masterHost;
         this.masterTemporalPath = masterTemporalPath;
         this.workerHost = workerHost;
         isRunning = false;
 
-        try { session = createSession(masterHost); } catch (JSchException e) {
+        try { session = createSession(username, password, masterHost); } catch (JSchException e) {
             throw new RuntimeException(e);
         }
     }
 
-    private Session createSession(String workerHost) throws JSchException {
-        Session session = new JSch().getSession("swarch", workerHost, 22);
-        session.setPassword("swarch");
+    private Session createSession(String username, String password, String workerHost) throws JSchException {
+        Session session = new JSch().getSession(username, workerHost, 22);
+        session.setPassword(password);
         session.setConfig("StrictHostKeyChecking", "no");
         return session;
     }
@@ -110,7 +108,7 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
         try {
             String groupFileName = getGroupFileName(key) + taskKey;
             createFile(groupFileName, groupList);
-            sendFileToMaster(groupFileName, masterTemporalPath, masterHost);
+            sendFileToMaster("./temp/" + groupFileName, masterTemporalPath);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -149,7 +147,7 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
         }
     }
 
-    private void sendFileToMaster(String from, String to, String masterHost) {
+    private void sendFileToMaster(String from, String to) {
         try {
             System.out.println("Sending file " + from + "to " + masterHost + ":" + to);
             long t1 = System.currentTimeMillis();
@@ -170,7 +168,7 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
         list.sort(Comparator.naturalOrder());
         try {
             createFile(task.key, list); //The FileName has been formatted from Master, hence why we use 'task.key'.
-            sendFileToMaster(task.key, masterTemporalPath, masterHost);
+            sendFileToMaster("./temp/" + task.key, masterTemporalPath);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
