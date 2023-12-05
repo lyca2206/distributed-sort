@@ -215,6 +215,7 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
         isRunning = false;
         shutdown();
         session.disconnect();
+        fjPool.shutdown();
         removeTemporalFiles();
     }
 
