@@ -67,7 +67,7 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
 
     private void startTaskPolling() {
         while (isRunning) {
-            if (getActiveCount() < getMaximumPoolSize()) { getThenExecuteTask(); }
+            getThenExecuteTask();
         }
     }
 
@@ -98,6 +98,8 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
 
     private void taskForGrouping(List<String> list, GroupingTask task) {
         System.out.println("Grouping Task Received.");
+
+        //TODO. Various groups need to be grouped here.
 
         Map<String, List<String>> groups = separateListIntoGroups(list, task.keyLength);
         groups.forEach((key, groupList) -> createFileForGroupAndSendToMaster(task.key, key, groupList));
@@ -178,6 +180,7 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
     }
 
     private void taskForSorting(List<String> list, Task task) {
+        //TODO. Parallel sorting.
         list.sort(Comparator.naturalOrder());
         try {
             createFile(task.key, list); //The FileName has been formatted from Master, hence why we use 'task.key'.
