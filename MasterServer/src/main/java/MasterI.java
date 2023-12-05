@@ -1,6 +1,7 @@
 import AppInterface.GroupingTask;
 import AppInterface.Task;
 import AppInterface.WorkerPrx;
+import com.jcraft.jsch.*;
 import com.zeroc.Ice.Current;
 import com.zeroc.Ice.TimeoutException;
 
@@ -14,15 +15,15 @@ import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 public class MasterI implements AppInterface.Master {
-    private final Queue<Task> queue;
-    private final Map<String, WorkerPrx> workers;
-    private final Map<String, Map<String, Task>> currentTasks;
-    private final Map<String, List<String>> groups;
+    private final Queue<Task> queue; //task queque
+    private final Map<String, WorkerPrx> workers; //Maps worker id to worker proxy
+    private final Map<String, Map<String, Task>> currentTasks; //Maps worker id to the tasks is currently processing
+    private final Map<String, List<String>> groups; // Maps
     private final long pingMillis;
-
     private boolean isProcessing;
     private long addingToResults;
     private long taskAmount;
+    private static final String WORKERS_TEMP_PATH = "/home/swarch/Documents/juanf-test-low-mem/WorkerServer/temp";
 
     public MasterI(Queue<Task> queue, Map<String, WorkerPrx> workers,
                    Map<String, Map<String, Task>> currentTasks,
@@ -57,15 +58,32 @@ public class MasterI implements AppInterface.Master {
         long startTime = System.nanoTime();
 
         isProcessing = true;
+
+        System.out.println("Launching workers");
+
         launchWorkers();
+
+        System.out.println("Starting worker ping thread");
+
         new Thread(this::startPingingWorkers).start();
 
+        System.out.println("Creating grouping tasks");
+
         createGroupingTasks(fileName, batchSize);
+
+        System.out.println("Serving Grouping tasks and Waiting for tasks to finish");
+
         doNextStepAfterFinalization();
+
+        System.out.println("Merging grouping result");
 
         mergeGroupingTasksResults();
 
+        System.out.println("Creating sorting tasks");
+
         createSortingTasks();
+
+        System.out.println("Serving sorting tasks and waiting for tasks to finish");
         doNextStepAfterFinalization();
         isProcessing = false;
 
@@ -84,6 +102,88 @@ public class MasterI implements AppInterface.Master {
         }
         if (isSorted()) { System.out.println("The list has been sorted successfully."); }
         else { System.out.println("An error has happened."); }
+    }
+
+    private void launchWorkers() {
+        workers.values().forEach(WorkerPrx::launch);
+    }
+
+    private void createGroupingTasks(String fileName, long batchSize) throws IOException {
+        try (BufferedReader br = new BufferedReader(new FileReader(fileName))) {
+            long fileSize = getFileSize(fileName);
+            long listSize = getLineCount(fileName);
+            long taskAmount = fileSize / batchSize + 1;
+            this.taskAmount = taskAmount;
+            long taskSize = listSize / taskAmount + 1;
+            int characters = (int) (Math.log(taskAmount) / Math.log(26 * 2 + 10)) + 1;
+
+            for (long i = 0; i < taskAmount; i++) {
+                ArrayList<String> data = readData(br, taskSize);
+                createGroupingFile(data, i);
+                //TODO: Remove HashMap in Constructor.
+                Task task = new GroupingTask(String.valueOf(i), new HashMap<>(), characters);
+                queue.add(task);
+            }
+        }
+    }
+
+    private void createGroupingFile(ArrayList<String> data, long index) throws IOException {
+        String fileName = "./temp/" + index;
+        File newGroupFile = new File(fileName);
+
+        if(newGroupFile.exists() && !newGroupFile.delete())
+            throw new IOException("Field already exists and could not be deleted " + fileName);
+
+        if (!newGroupFile.createNewFile())
+            throw new IOException("Could not create file " + fileName);
+
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(fileName))) {
+            for (String line : data) {
+                writer.write(line);
+                writer.newLine();
+            }
+        }
+    }
+
+    private void doNextStepAfterFinalization() {
+        while (true) {
+            AtomicLong totalSize = new AtomicLong();
+            currentTasks.forEach(((string, stringTaskMap) -> totalSize.addAndGet(stringTaskMap.size())));
+            if (queue.isEmpty() && totalSize.get() <= 0 && addingToResults <= 0) {
+                break;
+            }
+        }
+    }
+
+    @Override
+    public Task getTask(String workerId, Current current) {
+        Task task = queue.poll();
+        if (task != null) {
+            try {
+                currentTasks.get(workerId).put(task.id, task);
+                sendFileToWorker(task.id,workerId);
+            } catch (JSchException | FileNotFoundException | SftpException e) {
+                throw new RuntimeException(e);
+            }
+        }
+        return task;
+    }
+
+    private void sendFileToWorker(String fileName, String workerId) throws JSchException, FileNotFoundException, SftpException {
+        File localFile = new File("./temp/"+fileName);
+
+        Session session = new JSch().getSession("swarch",workerId,22);
+        session.setPassword("swarch");
+        session.setConfig("StrictHostKeyChecking", "no");
+        session.connect();
+
+        ChannelSftp channel = (ChannelSftp)session.openChannel("sftp");
+        channel.connect();
+        channel.cd(WORKERS_TEMP_PATH);
+        channel.put(new FileInputStream(localFile),localFile.getName());
+        channel.disconnect();
+
+        session.disconnect();
     }
 
     public void mergeGroupingTasksResults() throws IOException {
@@ -127,9 +227,7 @@ public class MasterI implements AppInterface.Master {
         return root.listFiles(file -> p.matcher(file.getName()).matches());
     }
 
-    private void launchWorkers() {
-        workers.values().forEach(WorkerPrx::launch);
-    }
+
 
     private void startPingingWorkers() {
         while (isProcessing) {
@@ -152,35 +250,6 @@ public class MasterI implements AppInterface.Master {
         workers.remove(key);
     }
 
-    private void createGroupingTasks(String fileName, long batchSize) throws IOException {
-        try (BufferedReader br = new BufferedReader(new FileReader(fileName))) {
-            long fileSize = getFileSize(fileName);
-            long listSize = getLineCount(fileName);
-            long taskAmount = fileSize / batchSize + 1;
-            this.taskAmount = taskAmount;
-            long taskSize = listSize / taskAmount + 1;
-            int characters = (int) (Math.log(taskAmount) / Math.log(26 * 2 + 10)) + 1;
-
-            for (long i = 0; i < taskAmount; i++) {
-                ArrayList<String> data = readData(br, taskSize);
-                createGroupInFile(data, i);
-                //TODO: Remove HashMap in Constructor.
-                Task task = new GroupingTask(String.valueOf(i), new HashMap<>(), characters);
-                queue.add(task);
-            }
-        }
-    }
-
-    private void createGroupInFile(ArrayList<String> data, long index) throws IOException {
-        String fileName = "./temp/" + index;
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter(fileName))) {
-            for (String line : data) {
-                writer.write(line);
-                writer.newLine();
-            }
-        }
-    }
-
     private long getFileSize(String fileName) throws IOException {
         return Files.size(Paths.get(fileName));
     }
@@ -201,20 +270,8 @@ public class MasterI implements AppInterface.Master {
         return data;
     }
 
-    private void doNextStepAfterFinalization() {
-        while (true) {
-            AtomicLong totalSize = new AtomicLong();
-            currentTasks.forEach(((string, stringTaskMap) -> totalSize.addAndGet(stringTaskMap.size())));
-            if (queue.isEmpty() && totalSize.get() <= 0 && addingToResults <= 0) {
-                break;
-            }
-        }
-    }
-
     private void createSortingTasks() {
-        File file = new File("./temp");
         groups.forEach((key, list) -> {
-            //TODO.
             Task task = new Task(key);
             queue.add(task);
         });
@@ -289,12 +346,9 @@ public class MasterI implements AppInterface.Master {
         return true;
     }
 
-    @Override
-    public Task getTask(String workerId, Current current) {
-        Task task = queue.poll();
-        if (task != null) { currentTasks.get(workerId).put(task.id, task); }
-        return task;
-    }
+
+
+
 
     @Override
     public void addGroupingResults(String workerId, String taskId, Current current) {
