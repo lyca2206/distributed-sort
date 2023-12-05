@@ -33,7 +33,7 @@ public class MasterServer {
         long pingMillis = Long.parseLong(properties.getProperty("pingMillis"));
         String workerTempPath = properties.getProperty("workerTempPath");
 
-        MasterI master = new MasterI(new ConcurrentLinkedQueue<>(), new ConcurrentHashMap<>(), new ConcurrentHashMap<>(), new ConcurrentSkipListSet<>(), pingMillis, workerTempPath);
+        MasterI master = new MasterI(new ConcurrentLinkedQueue<>(), new ConcurrentHashMap<>(), new ConcurrentHashMap<>(), new ConcurrentHashMap<>(), new ConcurrentSkipListSet<>(), pingMillis, workerTempPath);
         adapter.add(master, Util.stringToIdentity("Master"));
         adapter.activate();
         System.out.println("Master has been started.");

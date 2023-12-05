@@ -16,6 +16,7 @@ import java.util.stream.Stream;
 public class MasterI implements AppInterface.Master {
     private final Queue<Task> taskQueue;
     private final Map<String, WorkerPrx> workers;
+    private final Map<String, Session> sessions;
     private final Map<String, Map<String, Task>> currentTasks;
     private final SortedSet<String> groupKeys;
     private final long pingMillis;
@@ -25,10 +26,11 @@ public class MasterI implements AppInterface.Master {
     private long processesAddingToResults;
 
     public MasterI(Queue<Task> taskQueue, Map<String, WorkerPrx> workers,
-                   Map<String, Map<String, Task>> currentTasks, SortedSet<String> groupKeys,
-                   long pingMillis, String workerTemporalPath) {
+                   Map<String, Session> sessions, Map<String, Map<String, Task>> currentTasks,
+                   SortedSet<String> groupKeys, long pingMillis, String workerTemporalPath) {
         this.taskQueue = taskQueue;
         this.workers = workers;
+        this.sessions = sessions;
         this.currentTasks = currentTasks;
         this.groupKeys = groupKeys;
         this.pingMillis = pingMillis;
@@ -41,6 +43,12 @@ public class MasterI implements AppInterface.Master {
     public void signUp(String workerHost, WorkerPrx worker, Current current) {
         workers.put(workerHost, worker);
         currentTasks.put(workerHost, new ConcurrentHashMap<>());
+        try {
+            Session session = createSession(workerHost);
+            session.connect();
+            sessions.put(workerHost, session);
+        }
+        catch (JSchException e) { throw new RuntimeException(e); }
     }
 
     public void initialize(long batchSize) throws IOException {
@@ -270,6 +278,7 @@ public class MasterI implements AppInterface.Master {
     private void shutdownWorkers() {
         System.out.println("Shutting Down Workers.");
         workers.values().forEach(WorkerPrx::shutdown);
+        sessions.values().forEach(Session::disconnect);
     }
 
     private String writeResultIntoFile(String filePath) throws IOException {
@@ -334,16 +343,12 @@ public class MasterI implements AppInterface.Master {
             long t1 = System.currentTimeMillis();
             File localFile = new File(from);
 
-            Session session = createSession(workerHost);
-            session.connect();
-
+            Session session = sessions.get(workerHost);
             ChannelSftp channelSftp = (ChannelSftp) session.openChannel("sftp");
             channelSftp.connect();
             channelSftp.cd(to);
             channelSftp.put(new FileInputStream(localFile), localFile.getName());
             channelSftp.disconnect();
-
-            session.disconnect();
 
             long t2 = System.currentTimeMillis();
             System.out.println("File sent (" + (t2-t1) + " ms");
