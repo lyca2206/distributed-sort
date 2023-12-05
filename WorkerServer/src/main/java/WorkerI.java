@@ -32,10 +32,14 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
         }
     }
 
-    private Session createSession(String username, String password, String workerHost) throws JSchException {
-        Session session = new JSch().getSession(username, workerHost, 22);
+    private Session createSession(String username, String password, String masterHost) throws JSchException {
+        System.out.println("Creating SSH session with master at " + username + " " + password + " " + masterHost);
+        long t1 = System.currentTimeMillis();
+        Session session = new JSch().getSession(username, masterHost, 22);
         session.setPassword(password);
         session.setConfig("StrictHostKeyChecking", "no");
+        long t2 = System.currentTimeMillis();
+        System.out.println("Created SSH session with master(" + (t2-t1) + " ms)");
         return session;
     }
 
@@ -44,9 +48,18 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
         isRunning = true;
         new Thread(this::startTaskPolling).start();
 
-        try { session.connect(); } catch (JSchException e) {
+        System.out.println("Connecting to master...");
+        long t1 = System.currentTimeMillis();
+        try
+        {
+            session.connect();
+            long t2 = System.currentTimeMillis();
+            System.out.println("Connected to master (" + (t2-t1) + " ms)");
+        }
+        catch (JSchException e) {
             throw new RuntimeException(e);
         }
+
     }
 
     @Override
@@ -149,7 +162,7 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
 
     private void sendFileToMaster(String from, String to) {
         try {
-            System.out.println("Sending file " + from + "to " + masterHost + ":" + to);
+            System.out.println("Sending file " + from + "to master at "  + to);
             long t1 = System.currentTimeMillis();
             File localFile = new File(from);
             ChannelSftp channelSftp = (ChannelSftp) session.openChannel("sftp");

@@ -24,7 +24,7 @@ public class WorkerServer {
             MasterPrx masterPrx = createMasterProxy(communicator);
             WorkerPrx workerPrx = createWorkerProxy(communicator, masterPrx);
 
-            masterPrx.signUp(communicator.getProperties().getProperty("ID"), workerPrx);
+            masterPrx.signUp(communicator.getProperties().getProperty("workerHost"), workerPrx);
             System.out.println("Worker has been started.");
 
             communicator.waitForShutdown();
@@ -51,8 +51,8 @@ public class WorkerServer {
         String masterHost = properties.getProperty("masterHost");
         String masterTemporalPath = properties.getProperty("masterTemporalPath");
         String workerHost = properties.getProperty("workerHost");
-        String username = properties.getProperty("username");
-        String password = properties.getProperty("password");
+        String username = properties.getProperty("username").replace("\"","");
+        String password = properties.getProperty("password").replace("\"","");;
 
         WorkerI worker = new WorkerI(corePoolSize, maximumPoolSize,
                 keepAliveTime, TimeUnit.SECONDS, new LinkedBlockingQueue<>(),

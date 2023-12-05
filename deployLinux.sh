@@ -33,8 +33,10 @@ search_string="MasterServer.Proxy"
 replacement_string="MasterServer.Proxy = Master : tcp -h $masterIPV4Address -p 9099"
 search_string1="WorkerServer.Endpoints"
 replacement_string1="WorkerServer.Endpoints = tcp -h $workerIPV4Address"
-search_string2="ID"
-replacement_string2="ID = $workerIPV4Address"
+search_string3="masterHost"
+replacement_string3="masterHost = $masterIPV4Address"
+search_string4="workerHost"
+replacement_string4="workerHost = $workerIPV4Address"
 
 #Taken from ChatGPT. Prompt: bash script find line containing string and replace whole line   
 file_path="./worker.cfg"
@@ -42,6 +44,8 @@ file_path="./worker.cfg"
 # Use sed to replace the line
 sed -i "/$search_string/c\\$replacement_string" "$file_path"
 sed -i "/$search_string1/c\\$replacement_string1" "$file_path"
+sed -i "/$search_string3/c\\$replacement_string3" "$file_path"
+sed -i "/$search_string4/c\\$replacement_string4" "$file_path"
 #------------------------------------------------------------------
 
 jar uf WorkerServer.jar worker.cfg

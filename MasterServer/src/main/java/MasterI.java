@@ -206,12 +206,14 @@ public class MasterI implements AppInterface.Master {
 
         for (String key : groupKeys) {
             String groupFileName = getGroupFileName(key);
+            System.out.println("Group file name =" + groupFileName);
             File[] allGroupFiles = getMatchingTemporaryFiles(groupFileName + ".*");
 
             BufferedWriter bw = new BufferedWriter(new FileWriter(groupFileName));
             for (File file : allGroupFiles) {
                 writeFileIntoFile(bw, file);
             }
+            bw.flush();
             bw.close(); //TODO. We might want to call the Garbage Collector.
         }
     }
@@ -308,6 +310,10 @@ public class MasterI implements AppInterface.Master {
     public Task getTask(String workerHost, Current current) {
         Task task = taskQueue.poll();
         if (task != null) {
+            System.out.println(currentTasks);
+            System.out.println(workerHost);
+            System.out.println(task);
+            System.out.println(task.key);
             currentTasks.get(workerHost).put(task.key, task);
             sendFileToWorker("./temp/" + task.key, workerTemporalPath, workerHost);
         }
