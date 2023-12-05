@@ -15,6 +15,7 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
     private final String masterHost;
     private final String masterTemporalPath;
     private final String workerHost;
+    private final Session session;
 
     private boolean isRunning;
 
@@ -27,12 +28,27 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
         this.masterTemporalPath = masterTemporalPath;
         this.workerHost = workerHost;
         isRunning = false;
+
+        try { session = createSession(masterHost); } catch (JSchException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private Session createSession(String workerHost) throws JSchException {
+        Session session = new JSch().getSession("swarch", workerHost, 22);
+        session.setPassword("swarch");
+        session.setConfig("StrictHostKeyChecking", "no");
+        return session;
     }
 
     @Override
     public void launch(Current current) {
         isRunning = true;
         new Thread(this::startTaskPolling).start();
+
+        try { session.connect(); } catch (JSchException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @Override
@@ -134,30 +150,16 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
     }
 
     private void sendFileToMaster(String from, String to, String masterHost) {
-        //TODO. We gotta reuse the session to send various files.
         try {
             File localFile = new File(from);
-
-            Session session = createSession(masterHost);
-            session.connect();
-
             ChannelSftp channelSftp = (ChannelSftp) session.openChannel("sftp");
             channelSftp.connect();
             channelSftp.cd(to);
             channelSftp.put(new FileInputStream(localFile), localFile.getName());
             channelSftp.disconnect();
-
-            session.disconnect();
         } catch (JSchException | SftpException | FileNotFoundException e) {
             throw new RuntimeException(e);
         }
-    }
-
-    private Session createSession(String workerHost) throws JSchException {
-        Session session = new JSch().getSession("swarch", workerHost, 22);
-        session.setPassword("swarch");
-        session.setConfig("StrictHostKeyChecking", "no");
-        return session;
     }
 
     private void taskForSorting(List<String> list, Task task) {
@@ -175,5 +177,6 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
     public void shutdown(Current current) {
         isRunning = false;
         shutdown();
+        session.disconnect();
     }
 }
