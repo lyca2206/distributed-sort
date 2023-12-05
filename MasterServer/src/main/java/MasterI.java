@@ -134,7 +134,7 @@ public class MasterI implements AppInterface.Master {
             long step = 16;
 
             for (long i = 0; i < taskAmount; i += step) {
-                ArrayList<String> dataChunk = getDataChunk(br, taskSize);
+                ArrayList<String> dataChunk = getDataChunk(br, taskSize * step);
                 createFileForChunkAndGatherKeys(dataChunk, String.valueOf(i), keyLength);
                 Task task = new GroupingTask(String.valueOf(i), i, step, keyLength);
                 taskQueue.add(task);
