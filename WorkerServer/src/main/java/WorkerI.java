@@ -9,25 +9,29 @@ import java.io.*;
 import java.util.*;
 import java.util.concurrent.*;
 
-public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
+public class WorkerI implements AppInterface.Worker {
     private final MasterPrx masterPrx;
     private final String masterTemporalPath;
     private final String workerHost;
     private final Session session;
-
     private boolean isRunning;
 
     private final ForkJoinPool fjPool;
+    private final ExecutorService thPool;
+
+    long accumulatedNumElements = 0;
+
 
     public WorkerI(int corePoolSize, int maximumPoolSize, long keepAliveTime, TimeUnit unit,
                    BlockingQueue<Runnable> workQueue, MasterPrx masterPrx, String masterHost,
                    String masterTemporalPath, String workerHost, String username, String password) {
-        super(corePoolSize, maximumPoolSize, keepAliveTime, unit, workQueue);
+        //super(corePoolSize, maximumPoolSize, keepAliveTime, unit, workQueue);
         this.masterPrx = masterPrx;
         this.masterTemporalPath = masterTemporalPath;
         this.workerHost = workerHost;
         isRunning = false;
         this.fjPool = new ForkJoinPool(maximumPoolSize);
+        this.thPool = Executors.newFixedThreadPool(maximumPoolSize);
 
         try { session = createSession(username, password, masterHost); } catch (JSchException e) {
             throw new RuntimeException(e);
@@ -102,31 +106,46 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
 
     private void doMultipleGroupingTasks(List<String> list, GroupingTask task) {
         System.out.println("Grouping task " + task.key + " received.");
-        List<RunnableFuture<Void>> groupingTasks = new ArrayList<>();
-        for (long i = 0; i < task.step; i++) {
-            long finalI1 = i;
-            List<String> subList = list.subList((int) (task.taskSize * finalI1), (int) (task.taskSize * (finalI1 + 1)));
-            Runnable groupTask = () -> taskForGrouping(subList, task, String.valueOf(finalI1));
-            groupingTasks.add(new FutureTask<>(groupTask,null));
-            execute(groupTask);
+        List<Callable<Object>> groupingTasks = new ArrayList<>();
+        List<File> groupFiles = Collections.synchronizedList(new ArrayList<>());
+
+        long temp = 0;
+
+        while(temp < list.size()){
+            List<String> subList = list.subList((int) (temp),
+                    (int) Math.min(task.taskSize/task.step + temp, list.size())
+            );
+            accumulatedNumElements += subList.size();
+
+            long finalTemp = temp;
+            Callable<Object> groupTask = () -> {
+                taskForGrouping(subList, task, task.key,groupFiles, Long.toString(finalTemp));
+                return null;
+            };
+            groupingTasks.add(groupTask);
+
+            temp += task.taskSize/task.step;
         }
-        for (RunnableFuture<Void> r: groupingTasks) {
-            try { r.get(); } catch (InterruptedException | ExecutionException e) {
-                throw new RuntimeException(e);
-            }
+
+        try {
+            thPool.invokeAll(groupingTasks);
+        } catch (InterruptedException e) {
+            System.out.println("Error while trying to execute grouping tasks");
+            throw new RuntimeException(e);
         }
+
+        System.out.println("Sending group files to master...");
+        System.out.println("Accumulated elements " + accumulatedNumElements);
+        long t1 = System.currentTimeMillis();
+        sendFilesToMaster(groupFiles,masterTemporalPath);
+        long t2 = System.currentTimeMillis();
+        System.out.println("Sent complete for task " + task.key + " (" + (t2-t1) + " ms)");
         masterPrx.addGroupingResults(workerHost, task.key);
     }
 
-    private void taskForGrouping(List<String> list, GroupingTask task, String fileName) {
-        System.out.println("Grouping and sending files to master for task " + task.key);
-        long t1 = System.currentTimeMillis();
-
+    private void taskForGrouping(List<String> list, GroupingTask task, String fileName, List<File> filesList, String diff) {
         Map<String, List<String>> groups = separateListIntoGroups(list, task.keyLength);
-        groups.forEach((key, groupList) -> createFileForGroupAndSendToMaster(fileName, key, groupList));
-
-        long t2 = System.currentTimeMillis();
-        System.out.println("Grouping and sent complete for task " + task.key + " (" + (t2-t1) + " ms)");
+        groups.forEach((key, groupList) -> filesList.add(createFileForGroup(fileName, key, groupList,diff)));
     }
 
     private Map<String, List<String>> separateListIntoGroups(List<String> list, int keyLength) {
@@ -141,11 +160,10 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
         return groups;
     }
 
-    private void createFileForGroupAndSendToMaster(String taskKey, String key, List<String> groupList) {
+    private File createFileForGroup(String taskKey, String key, List<String> groupList, String diff) {
         try {
-            String groupFileName = getGroupFileName(key) + taskKey;
-            createFile(groupFileName, groupList);
-            sendFileToMaster("./temp/" + groupFileName, masterTemporalPath);
+            String groupFileName = getGroupFileName(key) + taskKey + diff;
+            return createFile(groupFileName, groupList);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -162,17 +180,20 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
         return groupFileName.toString();
     }
 
-    private void createFile(String fileName, List<String> data) throws IOException {
+    private File createFile(String fileName, List<String> data) throws IOException {
         String filePath = "./temp/" + fileName;
 
-        checkFileRestrictions(new File(filePath));
+        File newFile = new File(filePath);
+        checkFileRestrictions(newFile);
 
         try (BufferedWriter bw = new BufferedWriter(new FileWriter(filePath))) {
             for (String line : data) {
+
                 bw.write(line);
                 bw.newLine();
             }
         }
+        return newFile;
     }
 
     private void checkFileRestrictions(File file) throws IOException {
@@ -202,6 +223,7 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
             ChannelSftp channelSftp = (ChannelSftp) session.openChannel("sftp");
             channelSftp.connect();
             channelSftp.cd(to);
+            int i = 0;
             for (File file: files) {
                 channelSftp.put(new FileInputStream(file), file.getName());
             }
@@ -214,14 +236,15 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
     private void taskForSorting(List<String> list, Task task) {
         System.out.println("Received sort task " + task.key);
         long t1 = System.currentTimeMillis();
-
-        String[] listAsArray = new String[list.size()];
+        String[] listAsArray =list.toArray(new String[0]);
         list = new ArrayList<>(); //to clear memory
-        fjPool.invoke(new MSDRadixSortTask(list.toArray(listAsArray))); //"inplace"
+        //Arrays.parallelSort(listAsArray);
+        fjPool.invoke(new MSDRadixSortTask(listAsArray)); //"inplace"
         list = Arrays.asList(listAsArray);
+
         long t2 = System.currentTimeMillis();
         System.out.println("Completed sort task " + task.key + " (" + (t2-t1) + " ms)");
-        //list.sort(Comparator.naturalOrder());
+
         try {
             createFile(task.key, list); //The FileName has been formatted from Master, hence why we use 'task.key'.
             sendFileToMaster("./temp/" + task.key, masterTemporalPath);
@@ -234,7 +257,7 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
     @Override
     public void shutdown(Current current) {
         isRunning = false;
-        shutdown();
+        thPool.shutdown();
         session.disconnect();
         fjPool.shutdown();
         removeTemporalFiles();
@@ -246,4 +269,5 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
             if (notDeleted) { System.out.println("Couldn't delete file " + file + "."); }
         }
     }
+
 }

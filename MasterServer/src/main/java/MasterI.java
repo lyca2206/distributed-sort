@@ -132,13 +132,15 @@ public class MasterI implements AppInterface.Master {
             //int keyLength = (int) (Math.log(taskAmount) / Math.log(26 * 2 + 10)) + 1;
             int keyLength = 1;
             long step = 16;
-
-            for (long i = 0; i < taskAmount; i += step) {
-                ArrayList<String> dataChunk = getDataChunk(br, taskSize * step);
+            long temp = taskSize;
+            for (long i = 0; i < taskAmount; i++) {
+                ArrayList<String> dataChunk = getDataChunk(br, taskSize);
                 createFileForChunkAndGatherKeys(dataChunk, String.valueOf(i), keyLength);
-                Task task = new GroupingTask(String.valueOf(i), i, step, taskSize, keyLength);
+                Task task = new GroupingTask(String.valueOf(i),i,step,taskSize, keyLength);
                 taskQueue.add(task);
+                temp += taskSize;
             }
+            System.out.println("TOTAL TASK SIZE " + temp);
         }
     }
 
