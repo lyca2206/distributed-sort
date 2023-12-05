@@ -183,12 +183,14 @@ public class MasterI implements AppInterface.Master {
     }
 
     private void waitForFinalization() {
+        System.out.println("Started waiting");
         while (true) {
             long currentTaskQuantity = countCurrentTasks();
             if (taskQueue.isEmpty() && currentTaskQuantity <= 0 && processesAddingToResults <= 0) {
                 break;
             }
         }
+        System.out.println("End waiting");
     }
 
     private long countCurrentTasks() {
