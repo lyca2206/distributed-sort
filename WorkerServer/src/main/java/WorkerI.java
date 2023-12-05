@@ -151,12 +151,16 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
 
     private void sendFileToMaster(String from, String to, String masterHost) {
         try {
+            System.out.println("Sending file " + from + "to " + masterHost + ":" + to);
+            long t1 = System.currentTimeMillis();
             File localFile = new File(from);
             ChannelSftp channelSftp = (ChannelSftp) session.openChannel("sftp");
             channelSftp.connect();
             channelSftp.cd(to);
             channelSftp.put(new FileInputStream(localFile), localFile.getName());
             channelSftp.disconnect();
+            long t2 = System.currentTimeMillis();
+            System.out.println("File sent (" + (t2-t1) + " ms");
         } catch (JSchException | SftpException | FileNotFoundException e) {
             throw new RuntimeException(e);
         }

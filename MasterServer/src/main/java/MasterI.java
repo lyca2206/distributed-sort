@@ -316,6 +316,8 @@ public class MasterI implements AppInterface.Master {
 
     private void sendFileToWorker(String from, String to, String workerHost) {
         try {
+            System.out.println("Sending file " + from + "to " + workerHost + ":" + to);
+            long t1 = System.currentTimeMillis();
             File localFile = new File(from);
 
             Session session = createSession(workerHost);
@@ -328,6 +330,9 @@ public class MasterI implements AppInterface.Master {
             channelSftp.disconnect();
 
             session.disconnect();
+
+            long t2 = System.currentTimeMillis();
+            System.out.println("File sent (" + (t2-t1) + " ms");
         } catch (JSchException | SftpException | FileNotFoundException e) {
             throw new RuntimeException(e);
         }
