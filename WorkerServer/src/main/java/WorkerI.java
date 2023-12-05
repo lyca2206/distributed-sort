@@ -12,7 +12,6 @@ import java.util.concurrent.TimeUnit;
 
 public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
     private final MasterPrx masterPrx;
-    private final String masterHost;
     private final String masterTemporalPath;
     private final String workerHost;
     private final Session session;
@@ -24,7 +23,6 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
                    String masterTemporalPath, String workerHost) {
         super(corePoolSize, maximumPoolSize, keepAliveTime, unit, workQueue);
         this.masterPrx = masterPrx;
-        this.masterHost = masterHost;
         this.masterTemporalPath = masterTemporalPath;
         this.workerHost = workerHost;
         isRunning = false;
