@@ -10,361 +10,338 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 public class MasterI implements AppInterface.Master {
-    private final Queue<Task> queue; //task queque
-    private final Map<String, WorkerPrx> workers; //Maps worker id to worker proxy
-    private final Map<String, Map<String, Task>> currentTasks; //Maps worker id to the tasks is currently processing
-    private final Map<String, List<String>> groups; // Maps
+    private final Queue<Task> taskQueue;
+    private final Map<String, WorkerPrx> workers;
+    private final Map<String, Map<String, Task>> currentTasks;
+    private final SortedSet<String> groupKeys;
     private final long pingMillis;
-    private boolean isProcessing;
-    private long addingToResults;
-    private long taskAmount;
-    private static final String WORKERS_TEMP_PATH = "/home/swarch/Documents/juanf-test-low-mem/WorkerServer/temp";
+    private final String workerTemporalPath;
 
-    public MasterI(Queue<Task> queue, Map<String, WorkerPrx> workers,
-                   Map<String, Map<String, Task>> currentTasks,
-                   Map<String, List<String>> groups, long pingMillis) {
-        this.queue = queue;
+    private boolean isProcessing;
+    private long processesAddingToResults;
+
+    public MasterI(Queue<Task> taskQueue, Map<String, WorkerPrx> workers,
+                   Map<String, Map<String, Task>> currentTasks, SortedSet<String> groupKeys, long pingMillis, String workerTemporalPath) {
+        this.taskQueue = taskQueue;
         this.workers = workers;
         this.currentTasks = currentTasks;
-        this.groups = groups;
+        this.groupKeys = groupKeys;
         this.pingMillis = pingMillis;
+        this.workerTemporalPath = workerTemporalPath;
         isProcessing = false;
-        addingToResults = 0;
+        processesAddingToResults = 0;
     }
 
     @Override
-    public void signUp(String workerId, WorkerPrx worker, Current current) {
-        workers.put(workerId, worker);
-        currentTasks.put(workerId, new ConcurrentHashMap<>());
+    public void signUp(String workerHost, WorkerPrx worker, Current current) {
+        workers.put(workerHost, worker);
+        currentTasks.put(workerHost, new ConcurrentHashMap<>());
     }
 
     public void initialize(long batchSize) throws IOException {
-        try(BufferedReader br = new BufferedReader(new InputStreamReader(System.in)))
+        try (BufferedReader br = new BufferedReader(new InputStreamReader(System.in)))
         {
             System.out.println("Enter the name of the file to be sorted. Be aware that you need to deploy the Workers first.");
-            String fileName = "./" + br.readLine();
-            sort(fileName, batchSize);
+            String filePath = "./" + br.readLine();
+            sortFile(filePath, batchSize);
         }
     }
 
-    private void sort(String fileName, long batchSize) throws IOException {
-        System.out.println("Sorting has started.");
+    private void sortFile(String filePath, long batchSize) throws IOException {
+        System.out.println("Sorting process has been started.");
 
         long startTime = System.nanoTime();
-
+        launchWorkers();
         isProcessing = true;
 
-        System.out.println("Launching workers");
+        new Thread(this::checkVitalsOfWorkers).start();
 
-        launchWorkers();
+        createTasksForGrouping(filePath, batchSize);
+        waitForFinalization();
 
-        System.out.println("Starting worker ping thread");
-
-        new Thread(this::startPingingWorkers).start();
-
-        System.out.println("Creating grouping tasks");
-
-        createGroupingTasks(fileName, batchSize);
-
-        System.out.println("Serving Grouping tasks and Waiting for tasks to finish");
-
-        doNextStepAfterFinalization();
-
-        System.out.println("Merging grouping result");
-
-        mergeGroupingTasksResults();
-
-        System.out.println("Creating sorting tasks");
+        mergeTaskGroups();
 
         createSortingTasks();
+        waitForFinalization();
 
-        System.out.println("Serving sorting tasks and waiting for tasks to finish");
-        doNextStepAfterFinalization();
         isProcessing = false;
-
         shutdownWorkers();
-        processAndServeResult(fileName);
-
+        String outputFileName = writeResultIntoFile(filePath);
         long endTime = System.nanoTime();
 
-        System.out.println("Time: " + (endTime - startTime) + " ns.");
-        for(File file: Objects.requireNonNull(new File("./temp/").listFiles())){
-            if (!file.isDirectory()) {
-                if (!file.delete()) {
-                    System.out.println("Could not delete file " + file);
-                }
-            }
-        }
-        if (isSorted()) { System.out.println("The list has been sorted successfully."); }
+        removeTemporalFiles();
+
+        System.out.println("Sorting Time: " + (endTime - startTime) / 1000000 + "ms.");
+        if (isFileSorted(outputFileName)) { System.out.println("The list has been sorted successfully."); }
         else { System.out.println("An error has happened."); }
     }
 
     private void launchWorkers() {
+        System.out.println("Launching Workers.");
         workers.values().forEach(WorkerPrx::launch);
     }
 
-    private void createGroupingTasks(String fileName, long batchSize) throws IOException {
-        try (BufferedReader br = new BufferedReader(new FileReader(fileName))) {
-            long fileSize = getFileSize(fileName);
-            long listSize = getLineCount(fileName);
-            long taskAmount = fileSize / batchSize + 1;
-            this.taskAmount = taskAmount;
-            long taskSize = listSize / taskAmount + 1;
-            int characters = (int) (Math.log(taskAmount) / Math.log(26 * 2 + 10)) + 1;
+    private void checkVitalsOfWorkers() {
+        System.out.println("Checking Workers' Vitals.");
 
-            for (long i = 0; i < taskAmount; i++) {
-                ArrayList<String> data = readData(br, taskSize);
-                createGroupingFile(data, i);
-                //TODO: Remove HashMap in Constructor.
-                Task task = new GroupingTask(String.valueOf(i), new HashMap<>(), characters);
-                queue.add(task);
-            }
-        }
-    }
-
-    private void createGroupingFile(ArrayList<String> data, long index) throws IOException {
-        String fileName = "./temp/" + index;
-        File newGroupFile = new File(fileName);
-
-        if(newGroupFile.exists() && !newGroupFile.delete())
-            throw new IOException("Field already exists and could not be deleted " + fileName);
-
-        if (!newGroupFile.createNewFile())
-            throw new IOException("Could not create file " + fileName);
-
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter(fileName))) {
-            for (String line : data) {
-                writer.write(line);
-                writer.newLine();
-            }
-        }
-    }
-
-    private void doNextStepAfterFinalization() {
-        while (true) {
-            AtomicLong totalSize = new AtomicLong();
-            currentTasks.forEach(((string, stringTaskMap) -> totalSize.addAndGet(stringTaskMap.size())));
-            if (queue.isEmpty() && totalSize.get() <= 0 && addingToResults <= 0) {
-                break;
-            }
-        }
-    }
-
-    @Override
-    public Task getTask(String workerId, Current current) {
-        Task task = queue.poll();
-        if (task != null) {
-            try {
-                currentTasks.get(workerId).put(task.id, task);
-                sendFileToWorker(task.id,workerId);
-            } catch (JSchException | FileNotFoundException | SftpException e) {
-                throw new RuntimeException(e);
-            }
-        }
-        return task;
-    }
-
-    private void sendFileToWorker(String fileName, String workerId) throws JSchException, FileNotFoundException, SftpException {
-        File localFile = new File("./temp/"+fileName);
-
-        Session session = new JSch().getSession("swarch",workerId,22);
-        session.setPassword("swarch");
-        session.setConfig("StrictHostKeyChecking", "no");
-        session.connect();
-
-        ChannelSftp channel = (ChannelSftp)session.openChannel("sftp");
-        channel.connect();
-        channel.cd(WORKERS_TEMP_PATH);
-        channel.put(new FileInputStream(localFile),localFile.getName());
-        channel.disconnect();
-
-        session.disconnect();
-    }
-
-    public void mergeGroupingTasksResults() throws IOException {
-
-        Set<String> groupsToMerge = groups.keySet(); //This is an ordered set
-
-        for (String group : groupsToMerge) {
-            String groupFileName = getFileName(group);
-
-            File[] groupFiles = listTempFilesMatching(groupFileName+".*");
-
-            BufferedWriter bw = new BufferedWriter(new FileWriter(groupFileName));
-            for (File file : groupFiles) {
-                BufferedReader br = new BufferedReader(new FileReader(file));
-
-                String line = br.readLine();
-                while (line != null) {
-                    bw.write(line + "\n");
-                    line = br.readLine();
-                }
-                br.close();
-            }
-            //TODO may be pertinent to call garbage collector
-            bw.close();
-        }
-    }
-
-    /**
-     *
-     * @param regex Regex
-     * @return Array of files that match regex on ./temp/ folder
-     */
-    public static File[] listTempFilesMatching(String regex) {
-        File root = new File("./temp/");
-
-        if(!root.isDirectory()) {
-            throw new IllegalArgumentException(root+" is no directory.");
-        }
-
-        final Pattern p = Pattern.compile(regex);
-        return root.listFiles(file -> p.matcher(file.getName()).matches());
-    }
-
-
-
-    private void startPingingWorkers() {
         while (isProcessing) {
-            workers.keySet().forEach((key) ->
-            {
-                WorkerPrx worker = workers.get(key);
-                try { worker.ping(); }
-                catch (TimeoutException e) {
-                    resetTasks(key);}
-            });
+            workers.keySet().forEach(this::checkVitals);
+
             try { Thread.sleep(pingMillis); }
             catch (InterruptedException e) { throw new RuntimeException(e); }
         }
     }
 
-    private void resetTasks(String key) {
-        System.out.println("Worker " + key + " has been discarded (timeout).");
-        Map<String, Task> map = currentTasks.remove(key);
-        queue.addAll(map.values());
-        workers.remove(key);
+    private void checkVitals(String workerKey) {
+        WorkerPrx worker = workers.get(workerKey);
+
+        try { worker.ping(); }
+        catch (TimeoutException e) { resetWorkerTasks(workerKey); }
+    }
+
+    private void resetWorkerTasks(String workerKey) {
+        System.out.println("Worker " + workerKey + " has been discarded (timeout).");
+        Map<String, Task> currentWorkerTasks = currentTasks.remove(workerKey);
+        taskQueue.addAll(currentWorkerTasks.values());
+        workers.remove(workerKey);
+    }
+
+    private void createTasksForGrouping(String filePath, long batchSize) throws IOException {
+        System.out.println("Creating Tasks for Grouping.");
+
+        try (BufferedReader br = new BufferedReader(new FileReader(filePath))) {
+            long fileSize = getFileSize(filePath);
+            long lineAmount = countLines(filePath);
+            long taskAmount = fileSize / batchSize + 1;
+            long taskSize = lineAmount / taskAmount + 1;
+            int keyLength = (int) (Math.log(taskAmount) / Math.log(26 * 2 + 10)) + 1;
+
+            for (long i = 0; i < taskAmount; i++) { //TODO. We might require to initialize group keys here.
+                ArrayList<String> dataChunk = getDataChunk(br, taskSize);
+                createFileForChunk(dataChunk, i);
+                Task task = new GroupingTask(String.valueOf(i), keyLength);
+                taskQueue.add(task);
+            }
+        }
     }
 
     private long getFileSize(String fileName) throws IOException {
         return Files.size(Paths.get(fileName));
     }
 
-    private long getLineCount(String fileName) throws IOException {
+    private long countLines(String fileName) throws IOException {
         try (Stream<String> fileStream = Files.lines(Paths.get(fileName))) {
             return fileStream.count();
         }
     }
 
-    private ArrayList<String> readData(BufferedReader br, long taskSize) throws IOException {
-        ArrayList<String> data = new ArrayList<>((int) taskSize);
+    private ArrayList<String> getDataChunk(BufferedReader br, long taskSize) throws IOException {
+        ArrayList<String> dataChunk = new ArrayList<>((int) taskSize);
+
         for (long i = 0; i < taskSize; i++) {
             String line = br.readLine();
-            if (line == null) { return data; }
-            data.add(line);
+            if (line == null) { return dataChunk; }
+            dataChunk.add(line);
         }
-        return data;
+
+        return dataChunk;
+    }
+
+    private void createFileForChunk(ArrayList<String> dataChunk, long fileName) throws IOException {
+        String directory = "./temp/" + fileName;
+
+        checkFileRestrictions(new File(directory));
+
+        try (BufferedWriter bw = new BufferedWriter(new FileWriter(directory))) {
+            for (String line : dataChunk) {
+                bw.write(line);
+                bw.newLine();
+            }
+        }
+    }
+
+    private void checkFileRestrictions(File file) throws IOException {
+        if (file.exists() && !file.delete()) {
+            throw new IOException("The file already exists and it couldn't be deleted.");
+        }
+        if (!file.createNewFile()) {
+            throw new IOException("The file couldn't be created.");
+        }
+    }
+
+    private void waitForFinalization() {
+        while (true) {
+            long currentTaskQuantity = countCurrentTasks();
+            if (taskQueue.isEmpty() && currentTaskQuantity <= 0 && processesAddingToResults <= 0) {
+                break;
+            }
+        }
+    }
+
+    private long countCurrentTasks() {
+        long currentTaskQuantity = 0;
+
+        for (Map<String, Task> map : currentTasks.values()) {
+            currentTaskQuantity += map.size();
+        }
+
+        return currentTaskQuantity;
+    }
+
+    private void mergeTaskGroups() throws IOException {
+        System.out.println("Merging Groups Generated by Tasks.");
+
+        for (String key : groupKeys) {
+            String groupFileName = getGroupFileName(key);
+            File[] allGroupFiles = getMatchingTemporaryFiles(groupFileName + ".*");
+
+            BufferedWriter bw = new BufferedWriter(new FileWriter(groupFileName));
+            for (File file : allGroupFiles) {
+                writeFileIntoFile(bw, file);
+            }
+            bw.close(); //TODO. We might want to call the Garbage Collector.
+        }
+    }
+
+    private String getGroupFileName(String key) {
+        StringBuilder groupFileName = new StringBuilder();
+
+        for (int i = 0; i < key.length(); i++) {
+            int character = key.charAt(i);
+            groupFileName.append(character).append("_");
+        }
+
+        return groupFileName.toString();
+    }
+
+    private static File[] getMatchingTemporaryFiles(String regex) {
+        File tempDirectory = new File("./temp/");
+
+        if (!tempDirectory.isDirectory()) {
+            throw new IllegalArgumentException(tempDirectory + "isn't a directory.");
+        }
+
+        final Pattern pattern = Pattern.compile(regex);
+        return tempDirectory.listFiles((file) -> pattern.matcher(file.getName()).matches());
+    }
+
+    private void writeFileIntoFile(BufferedWriter bw, File file) throws IOException {
+        BufferedReader br = new BufferedReader(new FileReader(file));
+
+        String line = br.readLine();
+        while (line != null) {
+            bw.write(line);
+            bw.newLine();
+            line = br.readLine();
+        }
+
+        br.close();
     }
 
     private void createSortingTasks() {
-        groups.forEach((key, list) -> {
+        System.out.println("Creating Sorting Tasks.");
+
+        for (String key : groupKeys) {
             Task task = new Task(key);
-            queue.add(task);
-        });
-    }
-
-    private List<String> readFile(String fileName) {
-        List<String> list = new ArrayList<>();
-        try (BufferedReader br = new BufferedReader(new FileReader("./temp/" + fileName))) {
-            String line = br.readLine();
-            while(line != null) {
-                list.add(line);
-                line = br.readLine();
-            }
-        } catch (IOException e) {
-            throw new RuntimeException(e);
+            taskQueue.add(task);
         }
-        return list;
-    }
-
-    private void processAndServeResult(String fileName) throws IOException {
-        String[] directory = fileName.split("/");
-        String outFile = "sorted_" + directory[directory.length - 1];
-
-        Set<String> groupsToMerge = groups.keySet(); //This is an ordered set
-        Iterator<String> groupsIterator = groupsToMerge.iterator();
-
-
-        BufferedWriter bw = new BufferedWriter(new FileWriter(outFile));
-        while(groupsIterator.hasNext()) {
-            String group = groupsIterator.next();
-
-            String file = "./temp/" + getFileName(group);
-
-            BufferedReader br = new BufferedReader(new FileReader(file));
-
-            String line = br.readLine();
-
-            while(line != null){
-                bw.write(line + "\n");
-                line = br.readLine();
-            }
-
-            br.close();
-        }
-        bw.close();
-    }
-
-    /**
-     * Given a group such as "aa" returns its corresponding filename represented in integer of char
-     * "aa" return "97_97_", "a" returns "97_"
-     */
-    private String getFileName(String group){
-        StringBuilder fileName = new StringBuilder();
-        for (int i = 0; i < group.length(); i++) {
-            int letter = group.charAt(i);
-            fileName.append(letter).append("_");
-        }
-        return fileName.toString();
-    }
-
-
-    private boolean isSorted() {
-        String previous = null;
-        for (List<String> list : groups.values()) {
-            for (String string : list) {
-                if (previous == null) { previous = string; }
-                else if (string.compareTo(previous) < 0) {
-                    return false;
-                }
-            }
-        }
-        return true;
-    }
-
-
-
-
-
-    @Override
-    public void addGroupingResults(String workerId, String taskId, Current current) {
-        addingToResults++;
-        currentTasks.get(workerId).remove(taskId);
-        addingToResults--;
-    }
-
-    @Override
-    public void addSortingResults(String workerId, String taskId, Current current) {
-        addingToResults++;
-        currentTasks.get(workerId).remove(taskId);
-        addingToResults--;
     }
 
     private void shutdownWorkers() {
+        System.out.println("Shutting Down Workers.");
         workers.values().forEach(WorkerPrx::shutdown);
+    }
+
+    private String writeResultIntoFile(String filePath) throws IOException {
+        System.out.println("Writing Result into File: " + filePath);
+
+        String[] directories = filePath.split(File.pathSeparator);
+        String outputFileName = "sorted_" + directories[directories.length - 1];
+
+        BufferedWriter bw = new BufferedWriter(new FileWriter("./" + outputFileName));
+        for (String key : groupKeys) {
+            String groupFilePath = "./temp/" + getGroupFileName(key);
+            writeFileIntoFile(bw, new File(groupFilePath));
+        }
+
+        bw.close();
+        return outputFileName;
+    }
+
+    private void removeTemporalFiles() {
+        for (File file : Objects.requireNonNull(new File("./temp/").listFiles())) {
+            boolean notDeleted = !file.isDirectory() && !file.delete();
+            if (notDeleted) { System.out.println("Couldn't delete file " + file + "."); }
+        }
+    }
+
+    private boolean isFileSorted(String outputFileName) throws IOException {
+        BufferedReader br = new BufferedReader(new FileReader("./" + outputFileName));
+        String previous = br.readLine();
+        String line = br.readLine();
+
+        while (line != null) {
+            if (line.compareTo(previous) < 0) {
+                br.close(); return false;
+            }
+            previous = line;
+            line = br.readLine();
+        }
+
+        br.close(); return true;
+    }
+
+    @Override
+    public Task getTask(String workerHost, Current current) {
+        Task task = taskQueue.poll();
+        if (task != null) {
+            currentTasks.get(workerHost).put(task.key, task);
+            sendFileToWorker("./temp/" + task.key, workerTemporalPath, workerHost);
+        }
+        return task;
+    }
+
+    private void sendFileToWorker(String from, String to, String workerHost) {
+        try {
+            File localFile = new File(from);
+
+            Session session = createSession(workerHost);
+            session.connect();
+
+            ChannelSftp channelSftp = (ChannelSftp) session.openChannel("sftp");
+            channelSftp.connect();
+            channelSftp.cd(to);
+            channelSftp.put(new FileInputStream(localFile), localFile.getName());
+            channelSftp.disconnect();
+
+            session.disconnect();
+        } catch (JSchException | SftpException | FileNotFoundException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private Session createSession(String workerHost) throws JSchException {
+        Session session = new JSch().getSession("swarch", workerHost, 22);
+        session.setPassword("swarch");
+        session.setConfig("StrictHostKeyChecking", "no");
+        return session;
+    }
+
+    @Override
+    public void addGroupingResults(String workerHost, String taskKey, Current current) { //TODO. Merge with addSortingResults.
+        processesAddingToResults++;
+        currentTasks.get(workerHost).remove(taskKey);
+        processesAddingToResults--;
+    }
+
+    @Override
+    public void addSortingResults(String workerHost, String taskKey, Current current) { //TODO. Merge with addGroupingResults.
+        processesAddingToResults++;
+        currentTasks.get(workerHost).remove(taskKey);
+        processesAddingToResults--;
     }
 }

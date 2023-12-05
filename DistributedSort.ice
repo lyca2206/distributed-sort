@@ -6,12 +6,11 @@ module AppInterface
     dictionary<string, ArrayList> Map;
 
     class Task {
-        string id;
+        string key;
     };
 
     class GroupingTask extends Task {
-        Map groups;
-        int characters;
+        int keyLength;
     };
 
     interface Worker
@@ -23,9 +22,9 @@ module AppInterface
 
     interface Master
     {
-        void signUp(string workerId, Worker* worker);
-        Task getTask(string workerId);
-        void addGroupingResults(string workerId, string taskId);
-        void addSortingResults(string workerId, string taskId);
+        void signUp(string workerHost, Worker* worker);
+        Task getTask(string workerHost);
+        void addGroupingResults(string workerHost, string taskKey);
+        void addSortingResults(string workerHost, string taskKey);
     };
 };

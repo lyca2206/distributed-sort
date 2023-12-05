@@ -5,10 +5,7 @@ import com.jcraft.jsch.*;
 import com.zeroc.Ice.Current;
 
 import java.io.*;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Properties;
+import java.util.*;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -50,21 +47,21 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
     private void getThenExecuteTask() {
         Task task = masterPrx.getTask(id);
         if (task != null) {
-            List<String> list = readFile(task.id);
+            List<String> list = readFile(task.key);
             if (task instanceof GroupingTask) {
-                System.out.println("GroupingTask Received" + task.id);
+                System.out.println("GroupingTask Received" + task.key);
                 GroupingTask groupingTask = (GroupingTask) task;
                 execute(() -> {
-
+                    Map<String, List<String>> groups = new HashMap<>();
                     for (String string : list) {
-                        String key = string.substring(0, groupingTask.characters);
-                        if (!groupingTask.groups.containsKey(key)) { groupingTask.groups.put(key, new ArrayList<>()); }
-                        groupingTask.groups.get(key).add(string);
+                        String key = string.substring(0, groupingTask.keyLength);
+                        if (groups.containsKey(key)) { groups.put(key, new ArrayList<>()); }
+                        groups.get(key).add(string);
                     }
 
-                    groupingTask.groups.forEach((key, groupList) -> {
+                    groups.forEach((key, groupList) -> {
                         try {
-                            String fileName = getFileName(key) + task.id;
+                            String fileName = getFileName(key) + task.key;
                             writeFile(fileName, groupList);
                             sendFileToMaster(fileName);
                         } catch (IOException | JSchException | SftpException e) {
@@ -72,18 +69,18 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
                         }
                     });
 
-                    masterPrx.addGroupingResults(id, groupingTask.id);
+                    masterPrx.addGroupingResults(id, groupingTask.key);
                 });
             } else {
                 execute(() -> {
                     list.sort(Comparator.naturalOrder());
                     try {
-                        writeFile(task.id, list);
-                        sendFileToMaster(task.id);
+                        writeFile(task.key, list);
+                        sendFileToMaster(task.key);
                     } catch (IOException | JSchException | SftpException e) {
                         throw new RuntimeException(e);
                     }
-                    masterPrx.addSortingResults(id, task.id);
+                    masterPrx.addSortingResults(id, task.key);
                 });
             }
         }
