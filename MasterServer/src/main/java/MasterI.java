@@ -211,7 +211,10 @@ public class MasterI implements AppInterface.Master {
             System.out.println("Group file name =" + groupFileName);
             File[] allGroupFiles = getMatchingTemporaryFiles(groupFileName + ".*");
 
-            BufferedWriter bw = new BufferedWriter(new FileWriter(groupFileName));
+            File groupMergeFile = new File("./temp/" + groupFileName);
+            checkFileRestrictions(groupMergeFile);
+
+            BufferedWriter bw = new BufferedWriter(new FileWriter(groupMergeFile));
             for (File file : allGroupFiles) {
                 writeFileIntoFile(bw, file);
             }
@@ -272,7 +275,9 @@ public class MasterI implements AppInterface.Master {
     private String writeResultIntoFile(String filePath) throws IOException {
         System.out.println("Writing Result into File: " + filePath);
 
-        String[] directories = filePath.split(File.pathSeparator);
+        //String[] directories = filePath.split(File.pathSeparator); //TODO FILE SEPARATOR DOES NOT SPLIT PROPERLY THE FILE NAME
+
+        String[] directories = filePath.split("/");
         String outputFileName = "sorted_" + directories[directories.length - 1];
 
         BufferedWriter bw = new BufferedWriter(new FileWriter("./" + outputFileName));

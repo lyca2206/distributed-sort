@@ -194,4 +194,11 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
         shutdown();
         session.disconnect();
     }
+
+    private void removeTemporalFiles() {
+        for (File file : Objects.requireNonNull(new File("./temp/").listFiles())) {
+            boolean notDeleted = !file.isDirectory() && !file.delete();
+            if (notDeleted) { System.out.println("Couldn't delete file " + file + "."); }
+        }
+    }
 }
