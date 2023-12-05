@@ -5,6 +5,7 @@ import com.zeroc.Ice.Current;
 import com.zeroc.Ice.TimeoutException;
 
 import java.io.*;
+import java.net.Socket;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.*;
@@ -110,12 +111,38 @@ public class MasterI implements AppInterface.Master {
 
             for (long i = 0; i < taskAmount; i++) {
                 ArrayList<String> data = readData(br, taskSize);
-                createGroupInFile(data, i);
-                //TODO: Remove HashMap in Constructor.
+
+                // Crear el archivo temporal
+                String tempFileName = createTempFile(data, i);
+
+                // TODO: Actualiza la creación de la tarea para utilizar el nuevo archivo temporal
                 Task task = new GroupingTask(String.valueOf(i), new HashMap<>(), characters);
+
+                // Envia el archivo temporal al Worker usando FTP Client
+                sendFileToWorker(tempFileName);
+
                 queue.add(task);
             }
         }
+    }
+
+    // Método para enviar el archivo al Worker usando FTP Client
+    private void sendFileToWorker(String tempFileName) throws IOException {
+        try (Socket sock = new Socket("127.0.0.1", 13267);
+             OutputStream os = sock.getOutputStream()) {
+            new FileClient().send(os, tempFileName);
+        }
+    }
+
+    private String createTempFile(ArrayList<String> data, long index) throws IOException {
+        String fileName = "/temp/archivo" + index + ".txt";
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(fileName))) {
+            for (String line : data) {
+                writer.write(line);
+                writer.newLine();
+            }
+        }
+        return fileName;
     }
 
     private void createGroupInFile(ArrayList<String> data, long index) throws IOException {

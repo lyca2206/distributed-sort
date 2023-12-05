@@ -19,6 +19,16 @@ subprojects {
 
     dependencies {
         implementation 'com.zeroc:ice:3.7.10'
+        implementation 'org.apache.ftpserver:ftpserver-core:1.1.1'
+    }
+
+    sourceSets {
+        main {
+            java {
+                srcDirs = ['src/main/java']
+                include 'FileClient.java', 'FileServer.java'
+            }
+        }
     }
 
     jar {

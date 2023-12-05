@@ -3,10 +3,8 @@ import AppInterface.MasterPrx;
 import AppInterface.Task;
 import com.zeroc.Ice.Current;
 
-import java.io.BufferedReader;
-import java.io.FileNotFoundException;
-import java.io.FileReader;
-import java.io.IOException;
+import java.io.*;
+import java.net.Socket;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -52,14 +50,18 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
                 execute(() -> {
                     for (String string : list) {
                         String key = string.substring(0, groupingTask.characters);
-                        if (!groupingTask.groups.containsKey(key)) { groupingTask.groups.put(key, new ArrayList<>()); }
+                        if (!groupingTask.groups.containsKey(key)) {
+                            groupingTask.groups.put(key, new ArrayList<>());
+                        }
                         groupingTask.groups.get(key).add(string);
                     }
-                    //TODO. Send file (groupingTask.id) through FTP.
+                    // TODO: Enviar el archivo de nuevo al Master usando FTP Client
+                    sendFileToMaster(groupingTask.id);
                     masterPrx.addGroupingResults(id, groupingTask.id);
                 });
             } else {
-                //TODO. Send file (groupingTask.id) through FTP.
+                // TODO: Enviar el archivo de nuevo al Master usando FTP Client
+                sendFileToMaster(task.id);
                 execute(() -> {
                     list.sort(Comparator.naturalOrder());
                     masterPrx.addSortingResults(id, task.id);
@@ -68,6 +70,13 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
         }
     }
 
+    // Método para enviar el archivo al Master usando FTP Client
+    private void sendFileToMaster(String fileId) throws IOException {
+        try (Socket sock = new Socket("127.0.0.1", 13267);
+             OutputStream os = sock.getOutputStream()) {
+            new FileClient().send(os, fileId);
+        }
+    }
     private List<String> readFile(String fileName) {
         List<String> list = new ArrayList<>();
         try (BufferedReader br = new BufferedReader(new FileReader("/temp/" + fileName))) {
