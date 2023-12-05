@@ -103,7 +103,7 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
         long t1 = System.currentTimeMillis();
         groups.forEach((key, groupList) -> createFileForGroupAndSendToMaster(task.key, key, groupList));
         long t2 = System.currentTimeMillis();
-        System.out.println("Grouping and sent complete (" + (t2-t1) + " ms)");
+        System.out.println("Grouping and sent complete for task " + task.key + " (" + (t2-t1) + " ms)");
         masterPrx.addGroupingResults(workerHost, task.key);
     }
 
