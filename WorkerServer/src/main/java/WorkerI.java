@@ -110,7 +110,7 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
         try {
             String groupFileName = getGroupFileName(key) + taskKey;
             createFile(groupFileName, groupList);
-            sendFileToMaster("./temp/" + groupFileName, masterTemporalPath, masterHost);
+            sendFileToMaster("./temp/" + groupFileName, masterTemporalPath);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -149,7 +149,7 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
         }
     }
 
-    private void sendFileToMaster(String from, String to, String masterHost) {
+    private void sendFileToMaster(String from, String to) {
         try {
             File localFile = new File(from);
             ChannelSftp channelSftp = (ChannelSftp) session.openChannel("sftp");
@@ -166,7 +166,7 @@ public class WorkerI extends ThreadPoolExecutor implements AppInterface.Worker {
         list.sort(Comparator.naturalOrder());
         try {
             createFile(task.key, list); //The FileName has been formatted from Master, hence why we use 'task.key'.
-            sendFileToMaster("./temp/" + task.key, masterTemporalPath, masterHost);
+            sendFileToMaster("./temp/" + task.key, masterTemporalPath);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
