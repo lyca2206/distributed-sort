@@ -333,10 +333,9 @@ public class MasterI implements AppInterface.Master {
 
     @Override
     public Task getTask(String workerHost, Current current) {
-        Task task = taskQueue.peek();
+        Task task = taskQueue.poll();
         if (task != null) {
             currentTasks.get(workerHost).put(task.key, task);
-            taskQueue.remove();
             sendFileToWorker("./temp/" + task.key, workerTemporalPath, workerHost);
         }
         return task;
