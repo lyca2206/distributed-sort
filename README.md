@@ -13,5 +13,7 @@
 
 - Para ejecutar cada JAR, se debe emplear el comando 'java -jar [Nombre del JAR]'.
 
+- 500 millon strigs of 20 characters each: 42 minutes 
+
 - 	![alt text](files.jpg)
 - 	![alt text](time.jpg)
